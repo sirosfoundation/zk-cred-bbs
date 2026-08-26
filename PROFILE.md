@@ -131,6 +131,32 @@ The vectors are deterministic because the reference suite is configured with
 seeded random scalars (`SEED = "3.141592653589793238462643383279"`), which is
 also what makes the captured hardware signatures reproducible.
 
+### Emil's own generator, and why we do not use it directly
+
+`wallet-common` also ships the canonical, spec-formatted generator
+(`src/bbs/blind_bbs_test_vectors.ts`, run with `yarn install && yarn run
+build && npx node dist/bbs/blind_bbs_test_vectors.js`). It emits the
+draft's test-vector appendix rather than JSON, which is why this crate
+carries its own dump script instead.
+
+**As of `d0cc03f` that generator does not run.** It aborts with `Invalid
+signature` inside `CoreCommitVerify`, reached from `BlindSign`. The cause is
+that it was never updated for DELTA 1: at line 91 it still computes
+
+```ts
+const keybind_generators = await create_generators(K, "KEYBIND_" || api_id);
+```
+
+— the pre-BP1 formula — while `blind_bbs.ts` now uses
+`[G1.Point.BASE, ...create_generators(K-1, ...)]`. So it signs against a
+different generator than the library verifies against. `git log` on the file
+confirms it: its last change is `8a33eca`, which predates all three delta
+commits (`3a5f272`, `69f6a9c`, `43200b2`), none of which touched it.
+
+Prepending `G1.Point.BASE` to match the library makes it run to completion.
+Reported upstream; noted here because anyone reaching for the canonical
+generator will hit this.
+
 ## 6. What the hardware vector actually proves
 
 `hardware_keybind` in the vector file carries two signature constants
@@ -144,7 +170,14 @@ That is a strong conformance result and a weak hardware result. It proves
 this port agrees with the reference implementation on data a real
 authenticator produced. It does **not** exercise key generation, a second
 message, any error path, or any firmware behaviour, because that needs the
-token. See the plan's §4.4.1.
+token — and as of 2026-08-26 this org has no token on the required
+firmware. See the plan's §4.4.1.
+
+It also cannot exercise more than one key binding key. The `multi_keybind`
+vectors cover K = 1, 2 and 3 with software keys for exactly that reason:
+keybind generator 0 is BP1 (DELTA 1) while 1..K-1 come from
+`create_generators(K-1, "KEYBIND_")`, so everything past the first key is a
+path the hardware case never reaches.
 
 Relevant CTAP2 wire details, for whoever implements the authenticator side:
 

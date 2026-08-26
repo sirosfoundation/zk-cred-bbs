@@ -284,3 +284,126 @@ fn hardware_keybind_proof_matches_reference_and_verifies() {
     .blind_proof_verify(&pk, &proof, &header, &ph, signer_messages.len(), &disclosed_messages, &disclosures)
     .unwrap();
 }
+
+/// K = 1, 2, 3 with software key binding keys.
+///
+/// The hardware vector can only ever exercise K=1. That matters because
+/// keybind generator 0 is BP1 (DELTA 1) while generators 1..K-1 come from
+/// `create_generators(K-1, "KEYBIND_" || api_id)` — so everything past the
+/// first key is a code path the hardware case never reaches, in both the
+/// commitment and the proof.
+#[test]
+fn multi_keybind_matches_reference_for_k_1_2_3() {
+    use std::str::FromStr;
+    use zk_cred_bbs::blind::{BlindSuite, Disclosure, SCHNORR_SUITE_ID};
+    use zk_cred_bbs::keybind::SchnorrBls12381;
+    use zk_cred_bbs::suite::ScalarSource;
+
+    let v = vectors();
+    let hw = &v["hardware_keybind"];
+    let cases = v["multi_keybind"].as_array().expect("multi_keybind vectors");
+    assert_eq!(cases.len(), 3, "expected K = 1, 2, 3");
+
+    let pk = hex_of(&hw["pk"]);
+    let sk = zk_cred_bbs::bbs::scalar_from_be(&hex_of(&hw["sk"])).unwrap();
+    let header = hex_of(&hw["header"]);
+    let ph = hex_of(&hw["presentation_header"]);
+    let signer_messages = hex_list(&hw["signer_messages"]);
+    let committed_messages = hex_list(&hw["committed_messages"]);
+    let disclosures: Vec<Disclosure> = hw["disclosures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| Disclosure::from_str(d.as_str().unwrap()).unwrap())
+        .collect();
+
+    let mut all_messages = signer_messages.clone();
+    all_messages.extend(committed_messages.iter().cloned());
+    let disclosed: Vec<Vec<u8>> = all_messages
+        .iter()
+        .zip(disclosures.iter())
+        .filter(|(_, d)| **d == Disclosure::Disclose)
+        .map(|(m, _)| m.clone())
+        .collect();
+
+    for case in cases {
+        let k = case["k"].as_u64().unwrap();
+        let suite = BlindSuite::new(
+            Suite::new(ScalarSource::Seeded {
+                seed: hex_of(&hw["mock_seed"]),
+                dst: hex_of(&hw["mock_dst"]),
+            }),
+            SchnorrBls12381,
+            SCHNORR_SUITE_ID,
+        );
+
+        let keys = hex_list(&case["keybind_public_keys"]);
+        assert_eq!(keys.len(), k as usize);
+
+        let (state, blind, challenge) = suite.commit_init(&committed_messages, &keys).unwrap();
+        assert_eq!(
+            hex::encode(serialize(&[Ser::Scalar(challenge)])),
+            case["commit_challenge"].as_str().unwrap(),
+            "K={k}: commit challenge"
+        );
+
+        let commitment = suite
+            .commit_finalize(&state, &hex_list(&case["keybind_commit_signatures"]))
+            .unwrap();
+        assert_eq!(
+            hex::encode(&commitment),
+            case["commitment_with_proof"].as_str().unwrap(),
+            "K={k}: commitment"
+        );
+
+        // The issuer must accept all K proofs of possession, not just the first.
+        let signature = suite
+            .blind_sign(&sk, &pk, &commitment, &header, &signer_messages)
+            .unwrap();
+        assert_eq!(
+            hex::encode(&signature),
+            case["signature"].as_str().unwrap(),
+            "K={k}: signature"
+        );
+
+        let (proof_state, _, dpk_challenges) = suite
+            .blind_proof_gen_init(
+                &pk,
+                &signature,
+                &header,
+                &ph,
+                &all_messages,
+                signer_messages.len(),
+                &disclosures,
+                &keys,
+                &blind,
+            )
+            .unwrap();
+        let expected_challenges = case["dpk_challenges"].as_array().unwrap();
+        assert_eq!(dpk_challenges.len(), k as usize);
+        for (i, (got, want)) in dpk_challenges.iter().zip(expected_challenges).enumerate() {
+            assert_eq!(
+                hex::encode(got),
+                want.as_str().unwrap(),
+                "K={k}: key binding challenge {i}"
+            );
+        }
+
+        let proof = suite
+            .blind_proof_gen_finalize(&proof_state, &hex_list(&case["keybind_proof_signatures"]))
+            .unwrap();
+        assert_eq!(hex::encode(&proof), case["proof"].as_str().unwrap(), "K={k}: proof");
+
+        suite
+            .blind_proof_verify(
+                &pk,
+                &proof,
+                &header,
+                &ph,
+                signer_messages.len(),
+                &disclosed,
+                &disclosures,
+            )
+            .unwrap_or_else(|e| panic!("K={k}: own verifier rejected the proof: {e}"));
+    }
+}

@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import { it } from "vitest";
 
-import { concat, fromHex, toHex, toU8, toUtf8 } from "../utils/util";
+import { concat, fromHex, range, toHex, toU8, toUtf8 } from "../utils/util";
 import { getCipherSuite as getBaseSuite } from ".";
 import { DisclosureChoice, getCipherSuite } from "./blind_bbs";
 
@@ -155,6 +155,58 @@ it("dump", async () => {
 		dpk_challenges: dpk_challenges.map(c => hex(suite.Bbs.serialize([c]))),
 		proof: hex(proof),
 	};
+
+	// --- multi-key binding (K = 1, 2, 3) -----------------------------------
+	//
+	// Software keybind keys, so K can exceed the single hardware key. This is
+	// the coverage the hardware case cannot give: keybind generator index 0 is
+	// BP1 (DELTA 1) while 1..K-1 come from create_generators(K-1, "KEYBIND_"),
+	// so anything beyond K=1 exercises a different code path.
+	const kbSuite = getCipherSuite('BBS-SCHNORR_BLS12381G1_XMD:SHA-256_SSWU_RO_', { mocked_random_scalars_params: MOCK });
+	const kb = kbSuite.BlindBbs;
+	const kbApi = kb.api_id;
+	const kbG1 = kbSuite.params.curves.G1;
+
+	const kbDst = concat(toUtf8("TEST-VECTORS_"), kbApi);
+	const kbPrivate = await Promise.all([0, 1, 2].map(i =>
+		kbSuite.Bbs.hash_to_scalar(toUtf8(`keybind_private_keys[${i}]`), kbDst)));
+	const kbGenerators = [kbG1.Point.BASE, ...await kbSuite.Bbs.create_generators(2, concat(toUtf8("KEYBIND_"), kbApi))].slice(0, 3);
+	const kbPublic = kbPrivate.map((k, i) => kbGenerators[i].multiply(k));
+
+	out.multi_keybind = [];
+	for (const K of [1, 2, 3]) {
+		const pubs = kbPublic.slice(0, K).map(p => kbSuite.Bbs.serialize([p]));
+		const [st, spb, ch] = await kb.CommitInit(committed_messages, pubs);
+		const commitSigs = await Promise.all(range(K).map(i =>
+			kbSuite.BlindBbs.Sig.Sign(kbGenerators[i], kbPrivate[i], ch)));
+		const cwp = await kb.CommitFinalize(st, commitSigs);
+		const sig = await kb.BlindSign(SK, PK, cwp, header, draftMessages);
+
+		const [pst, , dpkCh] = await kb.BlindProofGenInit(
+			PK, sig, header, presentation_header,
+			[...draftMessages, ...committed_messages], draftMessages.length,
+			all_disclosures, pubs, spb);
+		const proofSigs = await Promise.all(range(K).map(i =>
+			kbSuite.BlindBbs.Sig.Sign(kbGenerators[i], kbPrivate[i], dpkCh[i])));
+		const pf = await kb.BlindProofGenFinalize(pst, proofSigs);
+		await kb.BlindProofVerify(PK, pf, header, presentation_header, draftMessages.length,
+			[...draftMessages.filter((_, i) => message_disclosures[i] === "DISCLOSE"),
+			 ...committed_messages.filter((_, i) => committed_message_disclosures[i] === "DISCLOSE")],
+			all_disclosures);
+
+		out.multi_keybind.push({
+			k: K,
+			keybind_public_keys: pubs.map(hex),
+			keybind_commit_signatures: commitSigs.map(hex),
+			keybind_proof_signatures: proofSigs.map(hex),
+			commit_challenge: hex(kbSuite.Bbs.serialize([ch])),
+			secret_prover_blind: hex(kbSuite.Bbs.serialize([spb])),
+			commitment_with_proof: hex(cwp),
+			signature: hex(sig),
+			dpk_challenges: dpkCh.map(hex),
+			proof: hex(pf),
+		});
+	}
 
 	writeFileSync(OUT, JSON.stringify(out, null, 2));
 	console.log("wrote", OUT);
