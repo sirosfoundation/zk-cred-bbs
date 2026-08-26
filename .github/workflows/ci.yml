@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   test:
+    name: Test, format, lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +21,61 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (uniffi)
+        run: cargo clippy --all-targets --features uniffi -- -D warnings
       - name: Test
         run: cargo test --all-targets
+
+  # The C header is hand-written. Rust asserts every constant at compile
+  # time; this catches drift in the other direction.
+  header:
+    name: C header drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check header matches go_ffi.rs
+        run: make check-go-header
+
+  # Exercises the real staticlib from Go against the reference vectors —
+  # the ABI vc will use. An ABI nobody compiles is an ABI nobody can trust.
+  go-cabi:
+    name: Go C ABI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Build C ABI and run the Go smoke test
+        run: make go-smoketest
+
+  bindings:
+    name: UniFFI bindings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Regenerate and check for staleness
+        run: make check-bindings
+
+  wasm:
+    name: Browser package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: Build the wasm package
+        run: make wasm
+      - name: Check the expected entry points are exported
+        run: |
+          for fn in commitInit commitFinalize verifyBlindSign \
+                    blindProofGenInit blindProofGenFinalize blindProofVerify; do
+            grep -q "export function $fn" pkg/zk_cred_bbs.js \
+              || { echo "missing export: $fn"; exit 1; }
+          done

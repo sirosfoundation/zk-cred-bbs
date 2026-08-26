@@ -36,7 +36,9 @@ prove.
 | Key binding: Schnorr on BLS12-381 G1 | implemented |
 | Key binding: `ecdsa-p256-db` (Lehmann) | not implemented — see `PROFILE.md` §4 |
 | Per-verifier pseudonyms | not implemented |
-| UniFFI / wasm / cgo bindings | not implemented |
+| UniFFI bindings (Kotlin, Swift) | generated, in `bindings/` |
+| C ABI for cgo (Go issuer + verifier) | implemented, smoke-tested from Go |
+| Browser package (wasm) | implemented, `make wasm` |
 
 Every value in `test-vectors/emlun_reference.json` was produced by the
 reference implementation. The `hardware_keybind` case additionally carries
@@ -81,10 +83,41 @@ in a worker while WebAuthn must run on the main thread.
 `ScalarSource::Seeded` exists so the drafts' own vectors, and the captured
 hardware signatures, are reproducible.
 
+## Bindings
+
+One implementation, four consumers — so a change lands everywhere at once
+rather than being ported three more times:
+
+| target | command | consumer |
+|---|---|---|
+| Kotlin | `make bindings-kotlin` | `siros-sdk-kotlin` |
+| Swift | `make bindings-swift` | `siros-sdk-swift` |
+| C ABI (cgo) | `make go-cabi` | `vc` issuer and verifier |
+| wasm | `make wasm` | `wallet-common` / `wallet-frontend` |
+
+`go-cabi-smoketest/` is a working Go binding over the C ABI, exercised
+against the reference vectors by `make go-smoketest`. It is written in the
+shape `vc` should adopt — note the `BlindSigner`/`ProofVerifier` interfaces,
+so an out-of-process implementation stays a constructor swap.
+
+The C header is hand-written; `make check-go-header` fails the build if it
+drifts from `src/go_ffi.rs`, in addition to the compile-time assertions on
+the Rust side.
+
+### The two-phase API is not decoration
+
+Both issuance and presentation split around an authenticator signature, and
+the intermediate `state` is always a plain octet string so it can cross a
+thread, process, or language boundary. In the browser this is load-bearing:
+the computation belongs in a worker, but WebAuthn requires the main thread
+and a user gesture. Do not add a single-call convenience wrapper — it could
+only work by calling WebAuthn from inside the worker, which does not work.
+
 ## Building
 
 ```sh
 cargo test          # includes the conformance and rejection suites
+make go-smoketest   # exercises the C ABI from Go
 ```
 
 ## Licence

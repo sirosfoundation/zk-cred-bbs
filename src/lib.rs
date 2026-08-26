@@ -6,11 +6,20 @@
 //! the CFRG draft.
 
 pub mod bbs;
+
 pub mod blind;
 pub mod error;
+#[cfg(feature = "uniffi")]
+pub mod ffi_api;
+pub mod go_ffi;
+#[cfg(feature = "wasm")]
+pub mod js_api;
 pub mod keybind;
 pub mod suite;
 pub mod util;
 
 pub use error::{Error, Result};
 pub use suite::{ScalarSource, Suite};
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
