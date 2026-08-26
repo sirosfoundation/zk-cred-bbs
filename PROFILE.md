@@ -148,6 +148,11 @@ token. See the plan's §4.4.1.
 
 Relevant CTAP2 wire details, for whoever implements the authenticator side:
 
+- firmware: **YubiKey 5.8.1-alpha0** (confirmed by Emil Lundberg,
+  2026-08-26). Note this is a *newer* alpha than the one this org's
+  existing ARKG/previewSign work ran against, so holding a previewSign
+  prototype token does not imply holding a BBS-capable one — check
+  `ykman info` for that exact version.
 - `previewSign` extension, `{"generateKey": {"algorithms": [-65609]}}`
 - COSE alg **-65609** = `EcsdsaBls12_381_BP1_Sha256_SEC1` (placeholder),
   curve 13 or placeholder -65601; public key in COSE `-2` as a 48-octet
