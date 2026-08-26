@@ -7,9 +7,10 @@
 import { writeFileSync } from "node:fs";
 import { it } from "vitest";
 
-import { concat, fromHex, range, toHex, toU8, toUtf8 } from "../utils/util";
+import { sha256 } from "../arkg/hash_to_curve";
+import { concat, fromHex, OS2IP, range, toHex, toU8, toUtf8 } from "../utils/util";
 import { getCipherSuite as getBaseSuite } from ".";
-import { DisclosureChoice, getCipherSuite } from "./blind_bbs";
+import { DisclosureChoice, getCipherSuite, SchnorrSignatureScheme } from "./blind_bbs";
 
 const OUT = process.env.VECTOR_OUT ?? "/tmp/bbs_vectors.json";
 
@@ -167,6 +168,20 @@ it("dump", async () => {
 	const kbApi = kb.api_id;
 	const kbG1 = kbSuite.params.curves.G1;
 
+	// Sign with a DETERMINISTIC nonce, the same construction Emil's own
+	// generator uses. Without it `Sig.Sign` draws a fresh random nonce, so
+	// every regeneration produces different signatures and therefore a
+	// different commitment_with_proof and proof - the file stops being
+	// reproducible and a regenerated diff looks like a regression.
+	const kbSig = SchnorrSignatureScheme(
+		kbSuite.Bbs,
+		async (msg) => OS2IP(await sha256(msg)),
+		async () => (await kbSuite.Bbs.real_calculate_random_scalars(1))[0],
+		(_Hk, SK, message, i) => kbSuite.Bbs.hash_to_scalar(
+			concat(kbSuite.Bbs.serialize([SK, i]), message),
+			concat(toUtf8("TEST-VECTORS_"), kbApi)),
+	);
+
 	const kbDst = concat(toUtf8("TEST-VECTORS_"), kbApi);
 	const kbPrivate = await Promise.all([0, 1, 2].map(i =>
 		kbSuite.Bbs.hash_to_scalar(toUtf8(`keybind_private_keys[${i}]`), kbDst)));
@@ -178,7 +193,7 @@ it("dump", async () => {
 		const pubs = kbPublic.slice(0, K).map(p => kbSuite.Bbs.serialize([p]));
 		const [st, spb, ch] = await kb.CommitInit(committed_messages, pubs);
 		const commitSigs = await Promise.all(range(K).map(i =>
-			kbSuite.BlindBbs.Sig.Sign(kbGenerators[i], kbPrivate[i], ch)));
+			kbSig.Sign(kbGenerators[i], kbPrivate[i], ch)));
 		const cwp = await kb.CommitFinalize(st, commitSigs);
 		const sig = await kb.BlindSign(SK, PK, cwp, header, draftMessages);
 
@@ -187,7 +202,7 @@ it("dump", async () => {
 			[...draftMessages, ...committed_messages], draftMessages.length,
 			all_disclosures, pubs, spb);
 		const proofSigs = await Promise.all(range(K).map(i =>
-			kbSuite.BlindBbs.Sig.Sign(kbGenerators[i], kbPrivate[i], dpkCh[i])));
+			kbSig.Sign(kbGenerators[i], kbPrivate[i], dpkCh[i])));
 		const pf = await kb.BlindProofGenFinalize(pst, proofSigs);
 		await kb.BlindProofVerify(PK, pf, header, presentation_header, draftMessages.length,
 			[...draftMessages.filter((_, i) => message_disclosures[i] === "DISCLOSE"),

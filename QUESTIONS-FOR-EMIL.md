@@ -5,31 +5,8 @@ anything he answers is something we don't need a token for.
 
 ---
 
-## First, a bug report
-
-**`src/bbs/blind_bbs_test_vectors.ts` doesn't run at branch head (`d0cc03f`).**
-`yarn install && yarn run build && npx node dist/bbs/blind_bbs_test_vectors.js`
-aborts with `Invalid signature` inside `CoreCommitVerify`, reached from
-`BlindSign`.
-
-Cause: it was never updated for the BP1 change. Line 91 still has
-
-```ts
-const keybind_generators = await create_generators(K, concat(toUtf8("KEYBIND_"), api_id));
-```
-
-while `blind_bbs.ts` now uses
-`[G1.Point.BASE, ...create_generators(K - 1, ...)].slice(0, K)`. So it signs
-against a different generator than the library verifies against. `git log`
-on the file agrees — its last change is `8a33eca`, which predates
-`3a5f272` (BP1), `69f6a9c` (prehash) and `43200b2` (SEC1); none of them
-touched it.
-
-Prepending `G1.Point.BASE` (and destructuring `G1` from
-`suite.params.curves`) makes it run to completion and emit the full vector
-set.
-
----
+*(The `blind_bbs_test_vectors.ts` breakage we hit is already fixed upstream
+in `edc791c` — nothing to report there.)*
 
 ## On the four deltas — are they firmware, or protocol? *(closes item 3)*
 

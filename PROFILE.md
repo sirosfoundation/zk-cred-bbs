@@ -121,7 +121,8 @@ reproduce it:
 
 ```sh
 git clone -b blind-bbs-schnorr https://github.com/emlun/wallet-common.git
-cd wallet-common && npm install --ignore-scripts
+cd wallet-common && git checkout edc791c   # or later
+yarn install
 # copy tools/dump_vectors.test.ts from this repo into src/bbs/
 VECTOR_OUT=/path/to/zk-cred-bbs/test-vectors/emlun_reference.json \
   npx vitest run src/bbs/dump_vectors.test.ts
@@ -131,31 +132,39 @@ The vectors are deterministic because the reference suite is configured with
 seeded random scalars (`SEED = "3.141592653589793238462643383279"`), which is
 also what makes the captured hardware signatures reproducible.
 
-### Emil's own generator, and why we do not use it directly
+### Reproducibility
+
+The whole file regenerates byte-identically. Two things make that true, and
+both are load-bearing:
+
+- the suite runs with **seeded random scalars**
+  (`SEED = "3.141592653589793238462643383279"`), which is also what makes
+  the captured hardware signatures reproducible; and
+- the software key binding signatures in `multi_keybind` are produced with
+  a **deterministic Schnorr nonce**, the same construction Emil's own
+  generator uses (`hash_to_scalar(serialize([SK, i]) || message,
+  "TEST-VECTORS_" || api_id)`). `Sig.Sign` otherwise draws a fresh random
+  nonce, which would change the signatures — and therefore
+  `commitment_with_proof` and `proof` — on every run, so a regenerated file
+  would diff against the committed one and look like a regression.
+
+### Emil's own generator
 
 `wallet-common` also ships the canonical, spec-formatted generator
 (`src/bbs/blind_bbs_test_vectors.ts`, run with `yarn install && yarn run
-build && npx node dist/bbs/blind_bbs_test_vectors.js`). It emits the
-draft's test-vector appendix rather than JSON, which is why this crate
-carries its own dump script instead.
+build && npx node dist/bbs/blind_bbs_test_vectors.js`). It emits the draft's
+test-vector appendix rather than JSON, which is why this crate carries its
+own dump script instead.
 
-**As of `d0cc03f` that generator does not run.** It aborts with `Invalid
-signature` inside `CoreCommitVerify`, reached from `BlindSign`. The cause is
-that it was never updated for DELTA 1: at line 91 it still computes
-
-```ts
-const keybind_generators = await create_generators(K, "KEYBIND_" || api_id);
-```
-
-— the pre-BP1 formula — while `blind_bbs.ts` now uses
-`[G1.Point.BASE, ...create_generators(K-1, ...)]`. So it signs against a
-different generator than the library verifies against. `git log` on the file
-confirms it: its last change is `8a33eca`, which predates all three delta
-commits (`3a5f272`, `69f6a9c`, `43200b2`), none of which touched it.
-
-Prepending `G1.Point.BASE` to match the library makes it run to completion.
-Reported upstream; noted here because anyone reaching for the canonical
-generator will hit this.
+It was broken between `8a33eca` and `d0cc03f` — it aborted with `Invalid
+signature` in `CoreCommitVerify`, because it had never been updated for
+DELTA 1 and still used the pre-BP1 `create_generators(K, "KEYBIND_")`, so it
+signed against a different generator than the library verified against.
+**Fixed upstream in `edc791c`** ("fixup! Use BP1 as first key binding
+generator"), which also corrects the generator's own emitted documentation
+line. That commit touches only the generator, not `blind_bbs.ts` — verified
+here by regenerating the vectors across it and confirming every
+deterministic value is byte-identical.
 
 ## 6. What the hardware vector actually proves
 
