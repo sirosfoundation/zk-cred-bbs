@@ -33,6 +33,14 @@ pub enum Error {
   SignerFailed(String),
   /// The caller combined options the profile does not allow.
   Unsupported(&'static str),
+  /// A credential container was structurally malformed.
+  ///
+  /// The only variant carrying a dynamic message. That is deliberate and
+  /// does not weaken the coarseness above: this is a *format* fault, found
+  /// before any secret is involved, and naming the offending header
+  /// parameter or message index costs an implementer hours while telling
+  /// an attacker nothing they did not already supply.
+  MalformedContainer(String),
 }
 
 impl fmt::Display for Error {
@@ -53,6 +61,7 @@ impl fmt::Display for Error {
       Error::VerificationFailed(what) => write!(f, "verification failed: {what}"),
       Error::SignerFailed(msg) => write!(f, "signer failed: {msg}"),
       Error::Unsupported(what) => write!(f, "unsupported: {what}"),
+      Error::MalformedContainer(msg) => write!(f, "malformed container: {msg}"),
     }
   }
 }
