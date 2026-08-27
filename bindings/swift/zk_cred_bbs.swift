@@ -806,6 +806,79 @@ public func FfiConverterTypeCommitInitResult_lower(_ value: CommitInitResult) ->
 
 
 /**
+ * Output of [`jwp_committed_messages`].
+ */
+public struct JwpCommittedMessages: Equatable, Hashable {
+    /**
+     * The messages to hand to [`commit_init`], in order.
+     */
+    public var messages: [Data]
+    /**
+     * Their RFC 6901 pointers, in the same order. These go in the credential
+     * request; the issuer needs them to build the credential's map and
+     * checks their count against the commitment.
+     */
+    public var pointers: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The messages to hand to [`commit_init`], in order.
+         */messages: [Data], 
+        /**
+         * Their RFC 6901 pointers, in the same order. These go in the credential
+         * request; the issuer needs them to build the credential's map and
+         * checks their count against the commitment.
+         */pointers: [String]) {
+        self.messages = messages
+        self.pointers = pointers
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JwpCommittedMessages: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJwpCommittedMessages: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JwpCommittedMessages {
+        return
+            try JwpCommittedMessages(
+                messages: FfiConverterSequenceData.read(from: &buf), 
+                pointers: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JwpCommittedMessages, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.messages, into: &buf)
+        FfiConverterSequenceString.write(value.pointers, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpCommittedMessages_lift(_ buf: RustBuffer) throws -> JwpCommittedMessages {
+    return try FfiConverterTypeJwpCommittedMessages.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpCommittedMessages_lower(_ value: JwpCommittedMessages) -> RustBuffer {
+    return FfiConverterTypeJwpCommittedMessages.lower(value)
+}
+
+
+/**
  * What a stored credential says about itself.
  */
 public struct JwpCredentialInfo: Equatable, Hashable {
@@ -1600,6 +1673,31 @@ public func jwpBuildPresentationHeader(nonce: String, aud: String, extraJson: St
 })
 }
 /**
+ * The holder's own claims, turned into the messages it commits to.
+ *
+ * The wallet's first step in blind issuance. It has claims by name and
+ * needs the ordered octet strings [`commit_init`] takes, in the same order
+ * the issuer will later assign message indices in - otherwise the
+ * credential's map names one claim while the signature covers another.
+ *
+ * Note what is NOT needed here: the issuer's message count. Indices go in
+ * the header's map, which the issuer builds; the message octets are just
+ * the claim values, so the wallet can commit before it knows how many
+ * claims the issuer will add.
+ *
+ * Returns the pointers alongside the messages because the credential
+ * request must carry them - the issuer never sees these values and cannot
+ * name them itself.
+ */
+public func jwpCommittedMessages(claimsJson: String)throws  -> JwpCommittedMessages  {
+    return try  FfiConverterTypeJwpCommittedMessages_lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_committed_messages(
+        FfiConverterString.lower(claimsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Read a stored credential without verifying it.
  *
  * For deciding whether this credential can satisfy a request. It parses
@@ -1722,6 +1820,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header() != 63085) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_committed_messages() != 7083) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_zk_cred_bbs_checksum_func_jwp_inspect() != 32872) {
