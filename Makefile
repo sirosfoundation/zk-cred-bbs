@@ -6,6 +6,9 @@
 # implementation rather than a parallel TypeScript one.
 #
 # Targets:
+#   make android           — cross-compile for Android (arm64, armv7, x86_64)
+#   make aar               — package the Android AAR
+#   make publish-local     — install AAR + POM into ~/.m2 for local SDK builds
 #   make bindings-kotlin   — generate Kotlin bindings from the host library
 #   make bindings-swift    — generate Swift bindings from the host library
 #   make go-cabi           — build the plain C-ABI cdylib/staticlib for cgo,
@@ -25,6 +28,8 @@ else
   HOST_LIB_EXT := so
 endif
 
+VERSION      := $(shell cargo metadata --no-deps --format-version 1 | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
+
 BUILD_DIR    := target
 BINDINGS_DIR := bindings
 KOTLIN_DIR   := $(BINDINGS_DIR)/kotlin
@@ -36,8 +41,15 @@ WASM_DIR     := pkg
 # this the build fails at link time with a missing __getrandom symbol.
 WASM_RUSTFLAGS := --cfg getrandom_backend="wasm_js"
 
+# Android cross-compilation (via cargo-ndk)
+ANDROID_TARGETS := aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+AAR_DIR         := $(BUILD_DIR)/aar
+MAVEN_GROUP     := org.siros
+MAVEN_ARTIFACT  := zk-cred-bbs
+MAVEN_LOCAL_DIR := $(HOME)/.m2/repository/$(subst .,/,$(MAVEN_GROUP))/$(MAVEN_ARTIFACT)/$(VERSION)
+
 .PHONY: all bindings-kotlin bindings-swift uniffi-lib go-cabi go-smoketest wasm \
-        check-go-header check-bindings clean FORCE
+        android aar pom publish-local check-go-header check-bindings clean FORCE
 
 all: bindings-kotlin bindings-swift
 
@@ -109,6 +121,69 @@ go-smoketest: go-cabi
 # from the header and compares.
 check-go-header:
 	python3 tools/check_go_header.py
+
+# ── Android cross-compilation (requires cargo-ndk + the Android NDK) ──
+
+android: $(foreach t,$(ANDROID_TARGETS),android-$(t))
+
+android-%:
+	cargo ndk --target $* --platform 28 -- build --release --features uniffi
+
+# ── AAR packaging ────────────────────────────────────────────────────
+
+aar: android
+	@mkdir -p $(AAR_DIR)/jni/arm64-v8a $(AAR_DIR)/jni/armeabi-v7a $(AAR_DIR)/jni/x86_64
+	cp $(BUILD_DIR)/aarch64-linux-android/release/$(LIB_NAME).so $(AAR_DIR)/jni/arm64-v8a/
+	cp $(BUILD_DIR)/armv7-linux-androideabi/release/$(LIB_NAME).so $(AAR_DIR)/jni/armeabi-v7a/
+	cp $(BUILD_DIR)/x86_64-linux-android/release/$(LIB_NAME).so $(AAR_DIR)/jni/x86_64/
+	@echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.siros.zkcredbbs"/>' \
+		> $(AAR_DIR)/AndroidManifest.xml
+	@# The AAR ships only the native .so libraries; the UniFFI Kotlin
+	@# bindings are consumed as vendored source by the SDK, so an empty
+	@# classes.jar (required by the AAR layout) is enough. JNA comes in
+	@# transitively via the POM.
+	@mkdir -p $(BUILD_DIR)/aar-classes/META-INF
+	@printf 'Manifest-Version: 1.0\n' > $(BUILD_DIR)/aar-classes/META-INF/MANIFEST.MF
+	cd $(BUILD_DIR)/aar-classes && zip -qr ../aar/classes.jar .
+	cd $(AAR_DIR) && zip -qr ../$(CRATE_NAME)-$(VERSION).aar .
+	@echo "AAR created at $(BUILD_DIR)/$(CRATE_NAME)-$(VERSION).aar"
+
+# ── Maven POM, so the AAR can be consumed by coordinates ─────────────
+
+pom:
+	@mkdir -p $(BUILD_DIR)
+	@printf '%s\n' \
+	  '<?xml version="1.0" encoding="UTF-8"?>' \
+	  '<project xmlns="http://maven.apache.org/POM/4.0.0"' \
+	  '         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' \
+	  '         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">' \
+	  '  <modelVersion>4.0.0</modelVersion>' \
+	  '  <groupId>$(MAVEN_GROUP)</groupId>' \
+	  '  <artifactId>$(MAVEN_ARTIFACT)</artifactId>' \
+	  '  <version>$(VERSION)</version>' \
+	  '  <packaging>aar</packaging>' \
+	  '  <dependencies>' \
+	  '    <dependency>' \
+	  '      <groupId>net.java.dev.jna</groupId>' \
+	  '      <artifactId>jna</artifactId>' \
+	  '      <version>5.14.0</version>' \
+	  '      <type>aar</type>' \
+	  '    </dependency>' \
+	  '  </dependencies>' \
+	  '</project>' \
+	  > $(BUILD_DIR)/$(MAVEN_ARTIFACT)-$(VERSION).pom
+	@echo "POM written to $(BUILD_DIR)/$(MAVEN_ARTIFACT)-$(VERSION).pom"
+
+# ── Local Maven install, for building the SDK against an unreleased
+#    crate: org.siros:zk-cred-bbs:$(VERSION) from mavenLocal ──────────
+
+publish-local: aar pom
+	@mkdir -p $(MAVEN_LOCAL_DIR)
+	cp $(BUILD_DIR)/$(CRATE_NAME)-$(VERSION).aar \
+	   $(MAVEN_LOCAL_DIR)/$(MAVEN_ARTIFACT)-$(VERSION).aar
+	cp $(BUILD_DIR)/$(MAVEN_ARTIFACT)-$(VERSION).pom \
+	   $(MAVEN_LOCAL_DIR)/$(MAVEN_ARTIFACT)-$(VERSION).pom
+	@echo "Installed to $(MAVEN_LOCAL_DIR)"
 
 # ── Browser / npm ───────────────────────────────────────────────────
 
