@@ -44,6 +44,7 @@ prove.
 | UniFFI bindings (Kotlin, Swift) | generated, in `bindings/` |
 | C ABI for cgo (Go issuer + verifier) | implemented, smoke-tested from Go |
 | Browser package (wasm) | implemented, `make wasm` |
+| iOS XCFramework | `make xcframework` (macOS only) |
 
 Every value in `test-vectors/emlun_reference.json` was produced by the
 reference implementation. The `hardware_keybind` case additionally carries
@@ -126,8 +127,8 @@ rather than being ported three more times:
 
 | target | command | consumer |
 |---|---|---|
-| Kotlin | `make bindings-kotlin` | `siros-sdk-kotlin` |
-| Swift | `make bindings-swift` | `siros-sdk-swift` |
+| Kotlin | `make bindings-kotlin` | `siros-sdk-kotlin` (AAR from GH Packages) |
+| Swift | `make bindings-swift` + `make xcframework` | `siros-sdk-swift` (XCFramework from the release) |
 | C ABI (cgo) | `make go-cabi` | `vc` issuer and verifier |
 | wasm | `make wasm` | `wallet-common` / `wallet-frontend` |
 
