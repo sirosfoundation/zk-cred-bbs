@@ -6,6 +6,8 @@
 # implementation rather than a parallel TypeScript one.
 #
 # Targets:
+#   make ios               — cross-compile for iOS (device + simulator)
+#   make xcframework       — package the iOS XCFramework for siros-sdk-swift
 #   make android           — cross-compile for Android (arm64, armv7, x86_64)
 #   make aar               — package the Android AAR
 #   make publish-local     — install AAR + POM into ~/.m2 for local SDK builds
@@ -41,6 +43,17 @@ WASM_DIR     := pkg
 # this the build fails at link time with a missing __getrandom symbol.
 WASM_RUSTFLAGS := --cfg getrandom_backend="wasm_js"
 
+# iOS cross-compilation. Requires macOS with Xcode toolchains - nothing
+# below this line builds on Linux.
+IOS_TARGETS     := aarch64-apple-ios
+IOS_SIM_TARGETS := aarch64-apple-ios-sim x86_64-apple-ios
+XCFRAMEWORK     := $(BUILD_DIR)/$(CRATE_NAME).xcframework
+
+# Matches siros-wscd-manager's and zk-cred-longfellow's pin. An app links
+# all three at once, and a lower target here would drag the whole product
+# down to it.
+export IPHONEOS_DEPLOYMENT_TARGET ?= 16.0
+
 # Android cross-compilation (via cargo-ndk)
 ANDROID_TARGETS := aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 AAR_DIR         := $(BUILD_DIR)/aar
@@ -49,7 +62,8 @@ MAVEN_ARTIFACT  := zk-cred-bbs
 MAVEN_LOCAL_DIR := $(HOME)/.m2/repository/$(subst .,/,$(MAVEN_GROUP))/$(MAVEN_ARTIFACT)/$(VERSION)
 
 .PHONY: all bindings-kotlin bindings-swift uniffi-lib go-cabi go-smoketest wasm \
-        android aar pom publish-local check-go-header check-bindings sdk-fixture clean FORCE
+        ios xcframework android aar pom publish-local check-go-header check-bindings \
+        sdk-fixture clean FORCE
 
 all: bindings-kotlin bindings-swift
 
@@ -127,6 +141,51 @@ sdk-fixture:
 # from the header and compares.
 check-go-header:
 	python3 tools/check_go_header.py
+
+# ── iOS cross-compilation (macOS + Xcode only) ──────────────────────
+
+ios: $(foreach t,$(IOS_TARGETS) $(IOS_SIM_TARGETS),ios-$(t))
+
+ios-%:
+	cargo build --release --target $* --features uniffi
+
+# ── XCFramework ─────────────────────────────────────────────────────
+
+xcframework: ios bindings-swift
+	@rm -rf $(XCFRAMEWORK)
+	# One fat binary for the simulator: an XCFramework slice may carry
+	# several architectures but only one platform.
+	@mkdir -p $(BUILD_DIR)/ios-sim-universal
+	lipo -create \
+		$(foreach t,$(IOS_SIM_TARGETS),$(BUILD_DIR)/$(t)/release/$(LIB_NAME).a) \
+		-output $(BUILD_DIR)/ios-sim-universal/$(LIB_NAME).a
+	# Plain "module", not "framework module": this is built from static
+	# libraries (-library/-headers), not real .framework bundles, and
+	# "framework module" fails to resolve at import time.
+	#
+	# Headers go under $(CRATE_NAME)FFI/ rather than at Headers/ root, and
+	# that nesting is load-bearing. When an app links two or more
+	# static-archive XCFrameworks together - and any app using this one
+	# also links siros-wscd-manager's, and probably zk-cred-longfellow's -
+	# Xcode's ProcessXCFramework step copies each one's Headers/ contents
+	# into the SAME per-product include/ directory. A flat
+	# Headers/module.modulemap from each collides there ("Multiple commands
+	# produce .../include/module.modulemap") no matter what the module
+	# inside is called. Nesting survives the copy, so each lands at
+	# include/<crate>FFI/module.modulemap. Learned the hard way in
+	# zk-cred-longfellow and siros-wscd-manager 0.7.3; do not flatten this.
+	@rm -rf $(BUILD_DIR)/Headers
+	@mkdir -p $(BUILD_DIR)/Headers/$(CRATE_NAME)FFI
+	@cp $(SWIFT_DIR)/$(CRATE_NAME)FFI.h $(BUILD_DIR)/Headers/$(CRATE_NAME)FFI/
+	@echo "module $(CRATE_NAME)FFI { header \"$(CRATE_NAME)FFI.h\" export * }" \
+		> $(BUILD_DIR)/Headers/$(CRATE_NAME)FFI/module.modulemap
+	xcodebuild -create-xcframework \
+		-library $(BUILD_DIR)/aarch64-apple-ios/release/$(LIB_NAME).a \
+		-headers $(BUILD_DIR)/Headers \
+		-library $(BUILD_DIR)/ios-sim-universal/$(LIB_NAME).a \
+		-headers $(BUILD_DIR)/Headers \
+		-output $(XCFRAMEWORK)
+	@echo "XCFramework created at $(XCFRAMEWORK)"
 
 # ── Android cross-compilation (requires cargo-ndk + the Android NDK) ──
 
