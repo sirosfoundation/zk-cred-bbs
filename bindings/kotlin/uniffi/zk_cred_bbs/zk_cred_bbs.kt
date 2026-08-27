@@ -683,6 +683,18 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_zk_cred_bbs_checksum_func_commit_init(
     ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_accept(
+    ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header(
+    ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_inspect(
+    ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_present_finalize(
+    ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_present_init(
+    ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_verify(
+    ): Int
     external fun uniffi_zk_cred_bbs_checksum_func_verify_blind_sign(
     ): Int
     external fun uniffi_zk_cred_bbs_checksum_method_bbsffierror_message(
@@ -720,6 +732,18 @@ internal object UniffiLib {
     external fun uniffi_zk_cred_bbs_fn_func_commit_finalize(`suiteId`: RustBuffer.ByValue,`state`: RustBuffer.ByValue,`keybindSignatures`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_zk_cred_bbs_fn_func_commit_init(`suiteId`: RustBuffer.ByValue,`committedMessages`: RustBuffer.ByValue,`keybindPublicKeys`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_accept(`suiteId`: RustBuffer.ByValue,`issuedJwp`: RustBuffer.ByValue,`issuerPublicKey`: RustBuffer.ByValue,`committedMessages`: RustBuffer.ByValue,`keybindPublicKeys`: RustBuffer.ByValue,`secretProverBlind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_build_presentation_header(`nonce`: RustBuffer.ByValue,`aud`: RustBuffer.ByValue,`extraJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_inspect(`issuedJwp`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_present_finalize(`suiteId`: RustBuffer.ByValue,`state`: RustBuffer.ByValue,`keybindSignatures`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_present_init(`suiteId`: RustBuffer.ByValue,`issuedJwp`: RustBuffer.ByValue,`issuerPublicKey`: RustBuffer.ByValue,`presentationHeader`: RustBuffer.ByValue,`requestedPointers`: RustBuffer.ByValue,`committedMessages`: RustBuffer.ByValue,`keybindPublicKeys`: RustBuffer.ByValue,`secretProverBlind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_verify(`suiteId`: RustBuffer.ByValue,`presentedJwp`: RustBuffer.ByValue,`issuerPublicKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_zk_cred_bbs_fn_func_verify_blind_sign(`suiteId`: RustBuffer.ByValue,`publicKey`: RustBuffer.ByValue,`signature`: RustBuffer.ByValue,`header`: RustBuffer.ByValue,`messages`: RustBuffer.ByValue,`issuerKnownMessagesNo`: Int,`keybindPublicKeys`: RustBuffer.ByValue,`secretProverBlind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -855,6 +879,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_zk_cred_bbs_checksum_func_commit_init() != 41686) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_accept() != 47026) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header() != 63085) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_inspect() != 32872) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_present_finalize() != 4013) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_present_init() != 38030) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_verify() != 45226) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_zk_cred_bbs_checksum_func_verify_blind_sign() != 2199) {
@@ -1457,6 +1499,213 @@ public object FfiConverterTypeCommitInitResult: FfiConverterRustBuffer<CommitIni
 
 
 /**
+ * What a stored credential says about itself.
+ */
+data class JwpCredentialInfo (
+    /**
+     * The SD-JWT VC type identifier, for matching against what a verifier
+     * asked for.
+     */
+    var `vct`: kotlin.String
+    , 
+    /**
+     * The key binding identifier, absent if the credential is not bound to
+     * a device key.
+     */
+    var `kb`: kotlin.String?
+    , 
+    /**
+     * Every claim's RFC 6901 pointer, in message order.
+     */
+    var `pointers`: List<kotlin.String>
+    , 
+    /**
+     * How many of the messages the issuer supplied. The remainder are the
+     * holder's own, committed at issuance.
+     */
+    var `numSignerMessages`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeJwpCredentialInfo: FfiConverterRustBuffer<JwpCredentialInfo> {
+    override fun read(buf: ByteBuffer): JwpCredentialInfo {
+        return JwpCredentialInfo(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: JwpCredentialInfo) = (
+            FfiConverterString.allocationSize(value.`vct`) +
+            FfiConverterOptionalString.allocationSize(value.`kb`) +
+            FfiConverterSequenceString.allocationSize(value.`pointers`) +
+            FfiConverterUInt.allocationSize(value.`numSignerMessages`)
+    )
+
+    override fun write(value: JwpCredentialInfo, buf: ByteBuffer) {
+            FfiConverterString.write(value.`vct`, buf)
+            FfiConverterOptionalString.write(value.`kb`, buf)
+            FfiConverterSequenceString.write(value.`pointers`, buf)
+            FfiConverterUInt.write(value.`numSignerMessages`, buf)
+    }
+}
+
+
+
+/**
+ * One claim a verifier learned from a presentation.
+ */
+data class JwpDisclosedClaim (
+    /**
+     * RFC 6901 pointer naming the claim.
+     */
+    var `pointer`: kotlin.String
+    , 
+    /**
+     * Its value, as JSON.
+     */
+    var `valueJson`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeJwpDisclosedClaim: FfiConverterRustBuffer<JwpDisclosedClaim> {
+    override fun read(buf: ByteBuffer): JwpDisclosedClaim {
+        return JwpDisclosedClaim(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: JwpDisclosedClaim) = (
+            FfiConverterString.allocationSize(value.`pointer`) +
+            FfiConverterString.allocationSize(value.`valueJson`)
+    )
+
+    override fun write(value: JwpDisclosedClaim, buf: ByteBuffer) {
+            FfiConverterString.write(value.`pointer`, buf)
+            FfiConverterString.write(value.`valueJson`, buf)
+    }
+}
+
+
+
+/**
+ * Output of [`jwp_present_init`].
+ */
+data class JwpPresentInitResult (
+    /**
+     * Opaque state for [`jwp_present_finalize`].
+     */
+    var `state`: kotlin.ByteArray
+    , 
+    /**
+     * One challenge per key binding key, already prehashed - hand each
+     * straight to the authenticator. See `PROFILE.md` DELTA 3.
+     */
+    var `keybindChallenges`: List<kotlin.ByteArray>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeJwpPresentInitResult: FfiConverterRustBuffer<JwpPresentInitResult> {
+    override fun read(buf: ByteBuffer): JwpPresentInitResult {
+        return JwpPresentInitResult(
+            FfiConverterByteArray.read(buf),
+            FfiConverterSequenceByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: JwpPresentInitResult) = (
+            FfiConverterByteArray.allocationSize(value.`state`) +
+            FfiConverterSequenceByteArray.allocationSize(value.`keybindChallenges`)
+    )
+
+    override fun write(value: JwpPresentInitResult, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`state`, buf)
+            FfiConverterSequenceByteArray.write(value.`keybindChallenges`, buf)
+    }
+}
+
+
+
+/**
+ * What a verifier learned from a presentation, after it verified.
+ */
+data class JwpPresentationResult (
+    var `vct`: kotlin.String
+    , 
+    /**
+     * Only the claims actually disclosed. Withheld ones are absent, not
+     * null - the verifier does not learn they exist beyond their pointer
+     * appearing in the header's map.
+     */
+    var `disclosed`: List<JwpDisclosedClaim>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeJwpPresentationResult: FfiConverterRustBuffer<JwpPresentationResult> {
+    override fun read(buf: ByteBuffer): JwpPresentationResult {
+        return JwpPresentationResult(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeJwpDisclosedClaim.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: JwpPresentationResult) = (
+            FfiConverterString.allocationSize(value.`vct`) +
+            FfiConverterSequenceTypeJwpDisclosedClaim.allocationSize(value.`disclosed`)
+    )
+
+    override fun write(value: JwpPresentationResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`vct`, buf)
+            FfiConverterSequenceTypeJwpDisclosedClaim.write(value.`disclosed`, buf)
+    }
+}
+
+
+
+/**
  * Output of [`blind_proof_gen_init`].
  */
 data class ProofGenInitResult (
@@ -1608,6 +1857,66 @@ public object FfiConverterTypeBbsSuiteId: FfiConverterRustBuffer<BbsSuiteId> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
+    override fun read(buf: ByteBuffer): kotlin.String? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterString.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.String?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterString.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.String?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceByteArray: FfiConverterRustBuffer<List<kotlin.ByteArray>> {
     override fun read(buf: ByteBuffer): List<kotlin.ByteArray> {
         val len = buf.getInt()
@@ -1626,6 +1935,34 @@ public object FfiConverterSequenceByteArray: FfiConverterRustBuffer<List<kotlin.
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterByteArray.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeJwpDisclosedClaim: FfiConverterRustBuffer<List<JwpDisclosedClaim>> {
+    override fun read(buf: ByteBuffer): List<JwpDisclosedClaim> {
+        val len = buf.getInt()
+        return List<JwpDisclosedClaim>(len) {
+            FfiConverterTypeJwpDisclosedClaim.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<JwpDisclosedClaim>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeJwpDisclosedClaim.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<JwpDisclosedClaim>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeJwpDisclosedClaim.write(it, buf)
         }
     }
 }
@@ -1757,6 +2094,136 @@ public object FfiConverterSequenceTypeBbsDisclosure: FfiConverterRustBuffer<List
         FfiConverterTypeBbsSuiteId.lower(`suiteId`),
         FfiConverterSequenceByteArray.lower(`committedMessages`),
         FfiConverterSequenceByteArray.lower(`keybindPublicKeys`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Check a freshly issued credential before storing it.
+         *
+         * This is not optional. It is the holder's only chance to find out that
+         * the issuer signed something other than what was asked for, or that the
+         * credential is not actually bound to the device key that was committed -
+         * both of which otherwise surface much later, as a presentation that will
+         * not verify.
+         */
+    @Throws(BbsFfiException::class) fun `jwpAccept`(`suiteId`: BbsSuiteId, `issuedJwp`: kotlin.String, `issuerPublicKey`: kotlin.ByteArray, `committedMessages`: List<kotlin.ByteArray>, `keybindPublicKeys`: List<kotlin.ByteArray>, `secretProverBlind`: kotlin.ByteArray): JwpCredentialInfo {
+            return FfiConverterTypeJwpCredentialInfo.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_accept(
+    
+        
+        FfiConverterTypeBbsSuiteId.lower(`suiteId`),
+        FfiConverterString.lower(`issuedJwp`),
+        FfiConverterByteArray.lower(`issuerPublicKey`),
+        FfiConverterSequenceByteArray.lower(`committedMessages`),
+        FfiConverterSequenceByteArray.lower(`keybindPublicKeys`),
+        FfiConverterByteArray.lower(`secretProverBlind`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Build a Presentation Header.
+         *
+         * `extra_json`, if given, is a JSON object whose members are merged in -
+         * the profile needs somewhere to bind a transport's own session
+         * transcript, and which member that is belongs to the SDK, not here.
+         */
+    @Throws(BbsFfiException::class) fun `jwpBuildPresentationHeader`(`nonce`: kotlin.String, `aud`: kotlin.String, `extraJson`: kotlin.String?): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_build_presentation_header(
+    
+        
+        FfiConverterString.lower(`nonce`),
+        FfiConverterString.lower(`aud`),
+        FfiConverterOptionalString.lower(`extraJson`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Read a stored credential without verifying it.
+         *
+         * For deciding whether this credential can satisfy a request. It parses
+         * and structurally validates the container, but proves nothing about the
+         * signature - use [`jwp_accept`] for that.
+         */
+    @Throws(BbsFfiException::class) fun `jwpInspect`(`issuedJwp`: kotlin.String): JwpCredentialInfo {
+            return FfiConverterTypeJwpCredentialInfo.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_inspect(
+    
+        
+        FfiConverterString.lower(`issuedJwp`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Complete the presentation, returning the compact presented JWP.
+         */
+    @Throws(BbsFfiException::class) fun `jwpPresentFinalize`(`suiteId`: BbsSuiteId, `state`: kotlin.ByteArray, `keybindSignatures`: List<kotlin.ByteArray>): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_present_finalize(
+    
+        
+        FfiConverterTypeBbsSuiteId.lower(`suiteId`),
+        FfiConverterByteArray.lower(`state`),
+        FfiConverterSequenceByteArray.lower(`keybindSignatures`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Begin a presentation, disclosing exactly `requested_pointers`.
+         *
+         * Splits around the authenticator signature for the same reason
+         * [`blind_proof_gen_init`] does: the device signs in the middle, and on
+         * the web that happens on a different thread than the computation.
+         */
+    @Throws(BbsFfiException::class) fun `jwpPresentInit`(`suiteId`: BbsSuiteId, `issuedJwp`: kotlin.String, `issuerPublicKey`: kotlin.ByteArray, `presentationHeader`: kotlin.ByteArray, `requestedPointers`: List<kotlin.String>, `committedMessages`: List<kotlin.ByteArray>, `keybindPublicKeys`: List<kotlin.ByteArray>, `secretProverBlind`: kotlin.ByteArray): JwpPresentInitResult {
+            return FfiConverterTypeJwpPresentInitResult.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_present_init(
+    
+        
+        FfiConverterTypeBbsSuiteId.lower(`suiteId`),
+        FfiConverterString.lower(`issuedJwp`),
+        FfiConverterByteArray.lower(`issuerPublicKey`),
+        FfiConverterByteArray.lower(`presentationHeader`),
+        FfiConverterSequenceString.lower(`requestedPointers`),
+        FfiConverterSequenceByteArray.lower(`committedMessages`),
+        FfiConverterSequenceByteArray.lower(`keybindPublicKeys`),
+        FfiConverterByteArray.lower(`secretProverBlind`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Verify a presentation and return what it disclosed.
+         *
+         * A wallet uses this to check its own output. A relying party would too,
+         * but in Go over the C ABI - the important property is that it is the
+         * same code either way.
+         */
+    @Throws(BbsFfiException::class) fun `jwpVerify`(`suiteId`: BbsSuiteId, `presentedJwp`: kotlin.String, `issuerPublicKey`: kotlin.ByteArray): JwpPresentationResult {
+            return FfiConverterTypeJwpPresentationResult.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_verify(
+    
+        
+        FfiConverterTypeBbsSuiteId.lower(`suiteId`),
+        FfiConverterString.lower(`presentedJwp`),
+        FfiConverterByteArray.lower(`issuerPublicKey`),_status)
 }
     )
     }

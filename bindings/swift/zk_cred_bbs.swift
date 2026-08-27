@@ -806,6 +806,308 @@ public func FfiConverterTypeCommitInitResult_lower(_ value: CommitInitResult) ->
 
 
 /**
+ * What a stored credential says about itself.
+ */
+public struct JwpCredentialInfo: Equatable, Hashable {
+    /**
+     * The SD-JWT VC type identifier, for matching against what a verifier
+     * asked for.
+     */
+    public var vct: String
+    /**
+     * The key binding identifier, absent if the credential is not bound to
+     * a device key.
+     */
+    public var kb: String?
+    /**
+     * Every claim's RFC 6901 pointer, in message order.
+     */
+    public var pointers: [String]
+    /**
+     * How many of the messages the issuer supplied. The remainder are the
+     * holder's own, committed at issuance.
+     */
+    public var numSignerMessages: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The SD-JWT VC type identifier, for matching against what a verifier
+         * asked for.
+         */vct: String, 
+        /**
+         * The key binding identifier, absent if the credential is not bound to
+         * a device key.
+         */kb: String?, 
+        /**
+         * Every claim's RFC 6901 pointer, in message order.
+         */pointers: [String], 
+        /**
+         * How many of the messages the issuer supplied. The remainder are the
+         * holder's own, committed at issuance.
+         */numSignerMessages: UInt32) {
+        self.vct = vct
+        self.kb = kb
+        self.pointers = pointers
+        self.numSignerMessages = numSignerMessages
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JwpCredentialInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJwpCredentialInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JwpCredentialInfo {
+        return
+            try JwpCredentialInfo(
+                vct: FfiConverterString.read(from: &buf), 
+                kb: FfiConverterOptionString.read(from: &buf), 
+                pointers: FfiConverterSequenceString.read(from: &buf), 
+                numSignerMessages: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JwpCredentialInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vct, into: &buf)
+        FfiConverterOptionString.write(value.kb, into: &buf)
+        FfiConverterSequenceString.write(value.pointers, into: &buf)
+        FfiConverterUInt32.write(value.numSignerMessages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpCredentialInfo_lift(_ buf: RustBuffer) throws -> JwpCredentialInfo {
+    return try FfiConverterTypeJwpCredentialInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpCredentialInfo_lower(_ value: JwpCredentialInfo) -> RustBuffer {
+    return FfiConverterTypeJwpCredentialInfo.lower(value)
+}
+
+
+/**
+ * One claim a verifier learned from a presentation.
+ */
+public struct JwpDisclosedClaim: Equatable, Hashable {
+    /**
+     * RFC 6901 pointer naming the claim.
+     */
+    public var pointer: String
+    /**
+     * Its value, as JSON.
+     */
+    public var valueJson: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * RFC 6901 pointer naming the claim.
+         */pointer: String, 
+        /**
+         * Its value, as JSON.
+         */valueJson: String) {
+        self.pointer = pointer
+        self.valueJson = valueJson
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JwpDisclosedClaim: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJwpDisclosedClaim: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JwpDisclosedClaim {
+        return
+            try JwpDisclosedClaim(
+                pointer: FfiConverterString.read(from: &buf), 
+                valueJson: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JwpDisclosedClaim, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pointer, into: &buf)
+        FfiConverterString.write(value.valueJson, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpDisclosedClaim_lift(_ buf: RustBuffer) throws -> JwpDisclosedClaim {
+    return try FfiConverterTypeJwpDisclosedClaim.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpDisclosedClaim_lower(_ value: JwpDisclosedClaim) -> RustBuffer {
+    return FfiConverterTypeJwpDisclosedClaim.lower(value)
+}
+
+
+/**
+ * Output of [`jwp_present_init`].
+ */
+public struct JwpPresentInitResult: Equatable, Hashable {
+    /**
+     * Opaque state for [`jwp_present_finalize`].
+     */
+    public var state: Data
+    /**
+     * One challenge per key binding key, already prehashed - hand each
+     * straight to the authenticator. See `PROFILE.md` DELTA 3.
+     */
+    public var keybindChallenges: [Data]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Opaque state for [`jwp_present_finalize`].
+         */state: Data, 
+        /**
+         * One challenge per key binding key, already prehashed - hand each
+         * straight to the authenticator. See `PROFILE.md` DELTA 3.
+         */keybindChallenges: [Data]) {
+        self.state = state
+        self.keybindChallenges = keybindChallenges
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JwpPresentInitResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJwpPresentInitResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JwpPresentInitResult {
+        return
+            try JwpPresentInitResult(
+                state: FfiConverterData.read(from: &buf), 
+                keybindChallenges: FfiConverterSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JwpPresentInitResult, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.state, into: &buf)
+        FfiConverterSequenceData.write(value.keybindChallenges, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpPresentInitResult_lift(_ buf: RustBuffer) throws -> JwpPresentInitResult {
+    return try FfiConverterTypeJwpPresentInitResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpPresentInitResult_lower(_ value: JwpPresentInitResult) -> RustBuffer {
+    return FfiConverterTypeJwpPresentInitResult.lower(value)
+}
+
+
+/**
+ * What a verifier learned from a presentation, after it verified.
+ */
+public struct JwpPresentationResult: Equatable, Hashable {
+    public var vct: String
+    /**
+     * Only the claims actually disclosed. Withheld ones are absent, not
+     * null - the verifier does not learn they exist beyond their pointer
+     * appearing in the header's map.
+     */
+    public var disclosed: [JwpDisclosedClaim]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(vct: String, 
+        /**
+         * Only the claims actually disclosed. Withheld ones are absent, not
+         * null - the verifier does not learn they exist beyond their pointer
+         * appearing in the header's map.
+         */disclosed: [JwpDisclosedClaim]) {
+        self.vct = vct
+        self.disclosed = disclosed
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JwpPresentationResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJwpPresentationResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JwpPresentationResult {
+        return
+            try JwpPresentationResult(
+                vct: FfiConverterString.read(from: &buf), 
+                disclosed: FfiConverterSequenceTypeJwpDisclosedClaim.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JwpPresentationResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vct, into: &buf)
+        FfiConverterSequenceTypeJwpDisclosedClaim.write(value.disclosed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpPresentationResult_lift(_ buf: RustBuffer) throws -> JwpPresentationResult {
+    return try FfiConverterTypeJwpPresentationResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJwpPresentationResult_lower(_ value: JwpPresentationResult) -> RustBuffer {
+    return FfiConverterTypeJwpPresentationResult.lower(value)
+}
+
+
+/**
  * Output of [`blind_proof_gen_init`].
  */
 public struct ProofGenInitResult: Equatable, Hashable {
@@ -1053,6 +1355,55 @@ public func FfiConverterTypeBbsSuiteId_lower(_ value: BbsSuiteId) -> RustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = String?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
     typealias SwiftType = [Data]
 
@@ -1070,6 +1421,31 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterData.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeJwpDisclosedClaim: FfiConverterRustBuffer {
+    typealias SwiftType = [JwpDisclosedClaim]
+
+    public static func write(_ value: [JwpDisclosedClaim], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeJwpDisclosedClaim.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [JwpDisclosedClaim] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [JwpDisclosedClaim]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeJwpDisclosedClaim.read(from: &buf))
         }
         return seq
     }
@@ -1185,6 +1561,112 @@ public func commitInit(suiteId: BbsSuiteId, committedMessages: [Data], keybindPu
 })
 }
 /**
+ * Check a freshly issued credential before storing it.
+ *
+ * This is not optional. It is the holder's only chance to find out that
+ * the issuer signed something other than what was asked for, or that the
+ * credential is not actually bound to the device key that was committed -
+ * both of which otherwise surface much later, as a presentation that will
+ * not verify.
+ */
+public func jwpAccept(suiteId: BbsSuiteId, issuedJwp: String, issuerPublicKey: Data, committedMessages: [Data], keybindPublicKeys: [Data], secretProverBlind: Data)throws  -> JwpCredentialInfo  {
+    return try  FfiConverterTypeJwpCredentialInfo_lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_accept(
+        FfiConverterTypeBbsSuiteId_lower(suiteId),
+        FfiConverterString.lower(issuedJwp),
+        FfiConverterData.lower(issuerPublicKey),
+        FfiConverterSequenceData.lower(committedMessages),
+        FfiConverterSequenceData.lower(keybindPublicKeys),
+        FfiConverterData.lower(secretProverBlind),uniffiCallStatus
+    )
+})
+}
+/**
+ * Build a Presentation Header.
+ *
+ * `extra_json`, if given, is a JSON object whose members are merged in -
+ * the profile needs somewhere to bind a transport's own session
+ * transcript, and which member that is belongs to the SDK, not here.
+ */
+public func jwpBuildPresentationHeader(nonce: String, aud: String, extraJson: String?)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_build_presentation_header(
+        FfiConverterString.lower(nonce),
+        FfiConverterString.lower(aud),
+        FfiConverterOptionString.lower(extraJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Read a stored credential without verifying it.
+ *
+ * For deciding whether this credential can satisfy a request. It parses
+ * and structurally validates the container, but proves nothing about the
+ * signature - use [`jwp_accept`] for that.
+ */
+public func jwpInspect(issuedJwp: String)throws  -> JwpCredentialInfo  {
+    return try  FfiConverterTypeJwpCredentialInfo_lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_inspect(
+        FfiConverterString.lower(issuedJwp),uniffiCallStatus
+    )
+})
+}
+/**
+ * Complete the presentation, returning the compact presented JWP.
+ */
+public func jwpPresentFinalize(suiteId: BbsSuiteId, state: Data, keybindSignatures: [Data])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_present_finalize(
+        FfiConverterTypeBbsSuiteId_lower(suiteId),
+        FfiConverterData.lower(state),
+        FfiConverterSequenceData.lower(keybindSignatures),uniffiCallStatus
+    )
+})
+}
+/**
+ * Begin a presentation, disclosing exactly `requested_pointers`.
+ *
+ * Splits around the authenticator signature for the same reason
+ * [`blind_proof_gen_init`] does: the device signs in the middle, and on
+ * the web that happens on a different thread than the computation.
+ */
+public func jwpPresentInit(suiteId: BbsSuiteId, issuedJwp: String, issuerPublicKey: Data, presentationHeader: Data, requestedPointers: [String], committedMessages: [Data], keybindPublicKeys: [Data], secretProverBlind: Data)throws  -> JwpPresentInitResult  {
+    return try  FfiConverterTypeJwpPresentInitResult_lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_present_init(
+        FfiConverterTypeBbsSuiteId_lower(suiteId),
+        FfiConverterString.lower(issuedJwp),
+        FfiConverterData.lower(issuerPublicKey),
+        FfiConverterData.lower(presentationHeader),
+        FfiConverterSequenceString.lower(requestedPointers),
+        FfiConverterSequenceData.lower(committedMessages),
+        FfiConverterSequenceData.lower(keybindPublicKeys),
+        FfiConverterData.lower(secretProverBlind),uniffiCallStatus
+    )
+})
+}
+/**
+ * Verify a presentation and return what it disclosed.
+ *
+ * A wallet uses this to check its own output. A relying party would too,
+ * but in Go over the C ABI - the important property is that it is the
+ * same code either way.
+ */
+public func jwpVerify(suiteId: BbsSuiteId, presentedJwp: String, issuerPublicKey: Data)throws  -> JwpPresentationResult  {
+    return try  FfiConverterTypeJwpPresentationResult_lift(try rustCallWithError(FfiConverterTypeBbsFfiError__as_error_lift) {
+        uniffiCallStatus in
+    uniffi_zk_cred_bbs_fn_func_jwp_verify(
+        FfiConverterTypeBbsSuiteId_lower(suiteId),
+        FfiConverterString.lower(presentedJwp),
+        FfiConverterData.lower(issuerPublicKey),uniffiCallStatus
+    )
+})
+}
+/**
  * Check that the issuer signed what it was supposed to.
  *
  * **Call this before storing a credential.** An issuer that signed a
@@ -1234,6 +1716,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_zk_cred_bbs_checksum_func_commit_init() != 41686) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_accept() != 47026) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header() != 63085) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_inspect() != 32872) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_present_finalize() != 4013) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_present_init() != 38030) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_zk_cred_bbs_checksum_func_jwp_verify() != 45226) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_zk_cred_bbs_checksum_func_verify_blind_sign() != 2199) {
