@@ -44,6 +44,31 @@ pub enum ScalarSource {
 }
 
 impl ScalarSource {
+  /// The same source, for a retry.
+  ///
+  /// [`System`](ScalarSource::System) is unchanged - it is already fresh
+  /// on every call. [`Seeded`](ScalarSource::Seeded) is not: it is a pure
+  /// function of `(seed, dst, count)`, so re-drawing from it returns the
+  /// *identical* scalar. Any algorithm that retries on a rejected draw
+  /// therefore cannot make progress against a seeded source unless the
+  /// attempt number is mixed in, which is what this does.
+  ///
+  /// Attempt 0 returns the source unchanged, so existing vectors and the
+  /// drafts' own reproduce byte for byte.
+  pub fn for_attempt(&self, attempt: usize) -> Self {
+    match self {
+      ScalarSource::System => ScalarSource::System,
+      ScalarSource::Seeded { seed, dst } if attempt == 0 => ScalarSource::Seeded {
+        seed: seed.clone(),
+        dst: dst.clone(),
+      },
+      ScalarSource::Seeded { seed, dst } => ScalarSource::Seeded {
+        seed: seed.clone(),
+        dst: [dst.as_slice(), b"_RETRY_", attempt.to_be_bytes().as_slice()].concat(),
+      },
+    }
+  }
+
   /// `calculate_random_scalars(count)`.
   pub fn calculate(&self, count: usize) -> Result<Vec<Scalar>> {
     match self {

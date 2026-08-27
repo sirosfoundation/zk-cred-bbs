@@ -197,10 +197,18 @@ impl SignatureScheme for SchnorrBls12381 {
   }
 
   fn sign(&self, hk: &G1Projective, sk: &Scalar, message: &[u8], scalars: &ScalarSource) -> Result<Vec<u8>> {
-    // Bounded retry: each attempt fails only if SHA-256 lands on a value
-    // >= r, which has probability ~2^-128 per attempt. A loop that could
-    // in principle run forever is not something to ship.
-    for _ in 0..64 {
+    // Bounded retry: an attempt fails when SHA-256 lands on a value >= r.
+    // That is NOT rare - r is about 0.453 * 2^256, so roughly 55% of
+    // attempts are rejected, and 64 of them all failing has probability
+    // ~1.7e-17. A loop that could in principle run forever is not
+    // something to ship.
+    //
+    // `for_attempt` is what makes the retry mean anything against a
+    // deterministic scalar source: without it every attempt re-draws the
+    // identical nonce, so a seeded source could not sign the ~55% of
+    // (key, message) pairs whose first attempt is rejected.
+    for attempt in 0..64 {
+      let scalars = &scalars.for_attempt(attempt);
       let k_tilde = scalars.calculate(1)?[0];
       let r = hk * k_tilde;
       let mut input = Self::serialize_nonce_point(&r);
@@ -253,6 +261,41 @@ mod tests {
     let sig = scheme.sign(&hk, &sk, msg, &seeded()).unwrap();
     assert_eq!(sig.len(), scheme.signature_length());
     scheme.verify(&hk, &pk, &sig, msg).unwrap();
+  }
+
+  /// Every message must be signable, not just a lucky majority.
+  ///
+  /// `sign` rejects a nonce whose challenge hash lands >= r, which happens
+  /// for about 55% of attempts - r is roughly 0.453 * 2^256, not the
+  /// vanishing probability the retry loop was once commented as. A seeded
+  /// scalar source re-draws the *same* nonce every time, so before
+  /// `ScalarSource::for_attempt` existed this failed outright for slightly
+  /// over half of these messages. One message would not have caught it.
+  #[test]
+  fn every_message_is_signable_from_a_deterministic_source() {
+    let scheme = SchnorrBls12381;
+    let hk = G1Projective::GENERATOR;
+    let (sk, pk) = scheme.key_gen(&hk, &seeded()).unwrap();
+    for i in 0..64u32 {
+      let msg = format!("message {i}");
+      let sig = scheme
+        .sign(&hk, &sk, msg.as_bytes(), &seeded())
+        .unwrap_or_else(|e| panic!("message {i} could not be signed: {e}"));
+      scheme
+        .verify(&hk, &pk, &sig, msg.as_bytes())
+        .unwrap_or_else(|e| panic!("message {i} did not verify: {e}"));
+    }
+  }
+
+  /// Retrying against a seeded source must actually change the nonce.
+  #[test]
+  fn a_seeded_source_yields_a_different_scalar_on_each_attempt() {
+    let source = seeded();
+    let draws: Vec<_> = (0..4).map(|i| source.for_attempt(i).calculate(1).unwrap()[0]).collect();
+    assert_eq!(draws[0], source.calculate(1).unwrap()[0], "attempt 0 must leave existing vectors alone");
+    for i in 1..draws.len() {
+      assert_ne!(draws[i], draws[0], "attempt {i} redrew the same scalar");
+    }
   }
 
   #[test]

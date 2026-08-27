@@ -14,6 +14,7 @@ pub mod ffi_api;
 pub mod go_ffi;
 #[cfg(feature = "wasm")]
 pub mod js_api;
+pub mod jwp;
 pub mod keybind;
 pub mod suite;
 pub mod util;

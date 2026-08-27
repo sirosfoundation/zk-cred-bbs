@@ -49,7 +49,7 @@ MAVEN_ARTIFACT  := zk-cred-bbs
 MAVEN_LOCAL_DIR := $(HOME)/.m2/repository/$(subst .,/,$(MAVEN_GROUP))/$(MAVEN_ARTIFACT)/$(VERSION)
 
 .PHONY: all bindings-kotlin bindings-swift uniffi-lib go-cabi go-smoketest wasm \
-        android aar pom publish-local check-go-header check-bindings clean FORCE
+        android aar pom publish-local check-go-header check-bindings sdk-fixture clean FORCE
 
 all: bindings-kotlin bindings-swift
 
@@ -115,6 +115,12 @@ go-smoketest: go-cabi
 		LD_LIBRARY_PATH="$(CURDIR)/$(GO_CABI_DIR)" \
 		GOWORK=off \
 		go test -v ./...
+
+# The fixture the native SDKs test against. Regenerate after any change to
+# the container or the claim mapping; the SDKs vendor a copy.
+sdk-fixture:
+	JWP_FIXTURE_OUT=test-vectors/sdk_jwp_fixture.json \
+		cargo test --features uniffi --test ffi_jwp dump_sdk_fixture
 
 # A hand-written header is only as good as the check that it still matches.
 # The Rust side asserts every constant at compile time; this re-derives them
