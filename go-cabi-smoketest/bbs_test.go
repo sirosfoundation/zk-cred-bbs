@@ -178,7 +178,6 @@ type jwpCase struct {
 	PresentedJWP   string          `json:"presented_jwp"`
 	Commitment     string          `json:"commitment"`
 	IssuerPK       string          `json:"issuer_pk"`
-	IssuerSK       string          `json:"issuer_sk"`
 	IssuerClaims   json.RawMessage `json:"issuer_claims"`
 	HolderPointers []string        `json:"holder_pointers"`
 	Vct            string          `json:"vct"`
@@ -205,12 +204,37 @@ func loadJWP(t *testing.T, name string) jwpCase {
 	return c
 }
 
+// loadIssuerSK reads the issuer's test signing key.
+//
+// It lives in its own file rather than in the fixture: the fixture is
+// vendored into the SDK repositories, and an unused secret-key-shaped field
+// duplicated into two more public repos is a secret-scanning false positive
+// waiting to happen. Only these tests, which exercise the issuer half, need
+// it at all.
+func loadIssuerSK(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../test-vectors/go_issuer_fixture.json")
+	if err != nil {
+		t.Fatalf("reading issuer fixture: %v", err)
+	}
+	var f struct {
+		IssuerSK string `json:"issuer_sk"`
+	}
+	if err := json.Unmarshal(raw, &f); err != nil {
+		t.Fatalf("parsing issuer fixture: %v", err)
+	}
+	if f.IssuerSK == "" {
+		t.Fatal("issuer fixture carries no issuer_sk")
+	}
+	return f.IssuerSK
+}
+
 func issueParams(t *testing.T, name string, kb KeyBinding, suite Suite) IssueParams {
 	t.Helper()
 	c := loadJWP(t, name)
 	return IssueParams{
 		Suite:          suite,
-		SecretKey:      unhex(t, c.IssuerSK),
+		SecretKey:      unhex(t, loadIssuerSK(t)),
 		PublicKey:      unhex(t, c.IssuerPK),
 		Commitment:     unhex(t, c.Commitment),
 		Vct:            c.Vct,
@@ -232,8 +256,8 @@ func issueParams(t *testing.T, name string, kb KeyBinding, suite Suite) IssuePar
 // failure says why. This is the test that catches it.
 func TestIssueMatchesTheRustSide(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		kb   KeyBinding
+		name  string
+		kb    KeyBinding
 		suite Suite
 	}{
 		{"plain", NoKeyBinding, SuitePlain},
