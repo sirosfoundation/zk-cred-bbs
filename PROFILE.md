@@ -70,6 +70,21 @@ The Schnorr nonce point `R` is hashed as `0x04 || x || y` (97 octets),
 **not** BBS's 48-octet Zcash-compact form, because that is what the
 firmware hashes. (`src/keybind.rs`, `serialize_nonce_point`.)
 
+**The one delta with an expiry date.** Emil, 2026-08-27: this is the current
+firmware's serialization, chosen because they already had it implemented and
+needed it in time for the demo. The firmware team has been alerted that they
+will want to **migrate to the compact serialization before a more mature
+release**. So this should *not* go into the CFRG PR — it is a
+YubiKey-prototype profile note, and a temporary one.
+
+When the firmware migrates, `serialize_nonce_point` collapses to
+`Bbs.serialize([R])` and this delta disappears. Note what that does and does
+not invalidate: the encoding only affects the per-presentation Schnorr
+challenge, so **already-issued credentials survive** — the key binding public
+key baked into a credential is just a point, unaffected. Only code that
+verifies a signature from that authenticator has to move, and a mixed fleet
+would need both encodings selectable.
+
 ### DELTA 3 — prehash of the key binding challenge
 
 The challenge is `serialize([randomized_key, challenge_scalar])` = 48 + 32 =
@@ -103,18 +118,27 @@ the WSCD layer or on the CTAP2 wire changes with it.
 ### DELTA 4 — key binding public keys are negated
 
 RFC 8235 computes `r = v − a·c`; eprint 2025/1995 computes `s = ω + c·sk`.
-The two are compatible iff the public key is negated. A wallet registering a
-device key produced under the RFC 8235 convention must negate it before
-using it as a key binding key.
+The two are compatible iff the public key is negated.
 
-This crate implements the eprint 2025/1995 convention and takes key binding
-public keys already in that form — **the negation is the caller's
-responsibility**, matching the reference implementation, which negates at the
-call site.
+**This one is permanent, and it is per-authenticator.** Emil's answer,
+2026-08-27: there is no plan to reconcile the two conventions yet — he
+intends to survey existing hardware Schnorr/BLS implementations, and the
+outcome may inform which the spec picks. But **whichever it picks, a
+non-zero number of implementations will land on the other side**, so the
+spec has to call the conversion out rather than legislate it away.
 
-**Open concern:** this is a sign-convention mismatch between two live
-specifications. It should be fixed in one of them rather than papered over
-by negating in every wallet.
+The practical consequence is that "does this key need negating" is a
+property of the authenticator that produced it, not a global constant, and
+it belongs with the stored key rather than at a call site.
+
+Use [`keybind::keybind_public_key_from_coordinates`] rather than doing it by
+hand. A real 5.8.1-alpha0 `generateKey` output reports the public key as an
+**EC2-style pair of 48-octet coordinates at COSE `-2`/`-3`** — not as a
+single compressed point — and follows the RFC 8235 convention, so both a
+re-encoding and the negation are needed. Each is silent when wrong: reading
+`-2` alone gives something the right length with the right leading bytes,
+and skipping the negation gives a perfectly valid point that just verifies
+nothing. `tests/hardware_capture.rs` pins both against the real capture.
 
 ## 4. Key binding is a seam, and it is not only a signature algorithm
 

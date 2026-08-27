@@ -72,6 +72,59 @@ impl SignatureScheme for NullScheme {
   }
 }
 
+/// Builds a key binding public key from the coordinates an authenticator
+/// reports, applying the sign conversion (`PROFILE.md` DELTA 4).
+///
+/// The YubiKey previewSign `generateKey` output carries the public key as an
+/// **EC2-style pair of 48-octet coordinates** at COSE `-2`/`-3` - not as a
+/// single compressed point. And it follows RFC 8235's sign convention while
+/// this crate follows eprint 2025/1995's, so the point must be negated
+/// before it is usable as a key binding key.
+///
+/// Both steps are easy to get wrong in ways that stay silent until a proof
+/// fails to verify, which is why this is a named function rather than a
+/// note for callers to follow:
+///
+/// * reading `-2` alone and treating those 48 octets as a compressed point
+///   yields something that is *almost* right - correct length, same leading
+///   bytes - and fails only at verification;
+/// * skipping the negation yields a key that is a perfectly valid point,
+///   just not the one that verifies anything.
+///
+/// Verified against a real 5.8.1-alpha0 capture in
+/// `tests/hardware_capture.rs`.
+pub fn keybind_public_key_from_coordinates(x: &[u8], y: &[u8]) -> Result<Vec<u8>> {
+  let (x, y): ([u8; 48], [u8; 48]) = (
+    x.try_into().map_err(|_| Error::InvalidLength {
+      what: "x coordinate",
+      expected: 48,
+      got: x.len(),
+    })?,
+    y.try_into().map_err(|_| Error::InvalidLength {
+      what: "y coordinate",
+      expected: 48,
+      got: y.len(),
+    })?,
+  );
+
+  // `from_uncompressed` expects the Zcash layout: x || y with the flag
+  // bits living in x's top three. The authenticator reports bare
+  // coordinates, so those bits must be clear or this is not the encoding
+  // we think it is.
+  if x[0] & 0xe0 != 0 {
+    return Err(Error::InvalidPoint("x coordinate has flag bits set; expected a bare coordinate"));
+  }
+  let mut uncompressed = [0u8; 96];
+  uncompressed[..48].copy_from_slice(&x);
+  uncompressed[48..].copy_from_slice(&y);
+
+  let affine: Option<G1Affine> = G1Affine::from_uncompressed(&uncompressed).into();
+  let affine = affine.ok_or(Error::InvalidPoint("coordinates are not a valid G1 point on the curve"))?;
+
+  // DELTA 4.
+  Ok(G1Affine::from(-G1Projective::from(affine)).to_compressed().to_vec())
+}
+
 /// Schnorr over BLS12-381 G1, in the formulation of eprint 2025/1995
 /// (`s = ω + c·sk`, verified as `R = s·H0 − c·pk`).
 ///
