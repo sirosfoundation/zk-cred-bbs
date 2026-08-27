@@ -554,3 +554,101 @@ fn dump_sdk_fixture() {
   std::fs::write(&path, serde_json::to_string_pretty(&doc).unwrap()).expect("write fixture");
   eprintln!("wrote {path}");
 }
+
+// ---------------------------------------------------------------------------
+// The wallet's side of issuance
+// ---------------------------------------------------------------------------
+
+/// The whole issuance handshake, wallet side, as an SDK will drive it.
+///
+/// The order of these calls is the point. The wallet commits BEFORE it
+/// knows anything about the issuer's own claims - it cannot know how many
+/// there will be - so the committed messages must not depend on that, and
+/// this checks they do not by committing first and issuing afterwards.
+#[test]
+fn a_wallet_can_commit_before_it_knows_the_issuers_claims() {
+  let holder_claims = r#"{"device_pin_hash":"0f1e2d3c","recovery_code":"xyz"}"#;
+
+  // 1. Derive the messages and their names.
+  let derived = jwp_committed_messages(holder_claims.into()).unwrap();
+  assert_eq!(derived.pointers, vec!["/device_pin_hash", "/recovery_code"], "sorted by pointer");
+  assert_eq!(derived.messages.len(), 2);
+  assert_eq!(derived.messages[0], b"\"0f1e2d3c\"".to_vec(), "the message is the claim's JSON value");
+
+  // 2. Commit. No key binding, so nothing to sign.
+  let commit = commit_init(BbsSuiteId::Plain, derived.messages.clone(), vec![]).unwrap();
+  let commitment = commit_finalize(BbsSuiteId::Plain, commit.state, vec![]).unwrap();
+
+  // 3. The issuer, only now deciding what IT will assert - two claims here,
+  //    a number the wallet had no way to know above.
+  let issuer_claims = json!({"given_name": "Alice", "family_name": "Andersson"});
+  let (cmap, issuer_messages, _) = jwp::build_cmap(&issuer_claims, 0).unwrap();
+  let hcmap = jwp::build_cmap_from_pointers(&derived.pointers, issuer_messages.len()).unwrap();
+  let issuer_header = jwp::build_issuer_header(VCT, cmap, Some(hcmap), None, &Map::new()).unwrap();
+
+  let (sk, pk) = issuer_key();
+  let suite = BlindSuite::new(Suite::new(ScalarSource::System), NullScheme, PLAIN_SUITE_ID);
+  let signature = suite.blind_sign(&sk, &pk, &commitment, &issuer_header, &issuer_messages).unwrap();
+  let issued = jwp::IssuedJwp {
+    issuer_header,
+    payloads: issuer_messages,
+    signature,
+  }
+  .encode();
+
+  // 4. Back in the wallet: the credential must validate against exactly
+  //    the messages and blind it committed with.
+  let info = jwp_accept(
+    BbsSuiteId::Plain,
+    issued.clone(),
+    pk.clone(),
+    derived.messages.clone(),
+    vec![],
+    commit.secret_prover_blind.clone(),
+  )
+  .unwrap();
+  assert_eq!(
+    info.pointers,
+    vec!["/family_name", "/given_name", "/device_pin_hash", "/recovery_code"],
+    "issuer claims first, then the wallet's own"
+  );
+
+  // 5. ... and it presents, including a claim the issuer never saw.
+  let ph = jwp_build_presentation_header("n".into(), "https://verifier.test".into(), None).unwrap();
+  let init = jwp_present_init(
+    BbsSuiteId::Plain,
+    issued,
+    pk.clone(),
+    ph,
+    vec!["/recovery_code".to_string()],
+    derived.messages,
+    vec![],
+    commit.secret_prover_blind,
+  )
+  .unwrap();
+  let presented = jwp_present_finalize(BbsSuiteId::Plain, init.state, vec![]).unwrap();
+  let result = jwp_verify(BbsSuiteId::Plain, presented, pk).unwrap();
+  assert_eq!(result.disclosed.len(), 1);
+  assert_eq!(result.disclosed[0].pointer, "/recovery_code");
+  assert_eq!(result.disclosed[0].value_json, "\"xyz\"");
+}
+
+#[test]
+fn committed_message_derivation_rejects_what_it_cannot_map() {
+  for bad in [r#"{}"#, r#"["not","an","object"]"#, r#"{"#, r#""scalar""#] {
+    assert!(jwp_committed_messages(bad.into()).is_err(), "should reject {bad}");
+  }
+}
+
+/// Two wallets with the same claims must derive the same messages, whatever
+/// order the claims arrive in - the issuer will index them by sorted
+/// pointer, and a wallet that committed in document order would bind its
+/// values to the wrong names.
+#[test]
+fn committed_message_derivation_is_order_independent() {
+  let a = jwp_committed_messages(r#"{"b":2,"a":1}"#.into()).unwrap();
+  let b = jwp_committed_messages(r#"{"a":1,"b":2}"#.into()).unwrap();
+  assert_eq!(a.pointers, b.pointers);
+  assert_eq!(a.messages, b.messages);
+  assert_eq!(a.pointers, vec!["/a", "/b"]);
+}

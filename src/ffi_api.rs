@@ -310,6 +310,17 @@ pub struct JwpPresentationResult {
   pub disclosed: Vec<JwpDisclosedClaim>,
 }
 
+/// Output of [`jwp_committed_messages`].
+#[derive(uniffi::Record)]
+pub struct JwpCommittedMessages {
+  /// The messages to hand to [`commit_init`], in order.
+  pub messages: Vec<Vec<u8>>,
+  /// Their RFC 6901 pointers, in the same order. These go in the credential
+  /// request; the issuer needs them to build the credential's map and
+  /// checks their count against the commitment.
+  pub pointers: Vec<String>,
+}
+
 /// Output of [`jwp_present_init`].
 #[derive(uniffi::Record)]
 pub struct JwpPresentInitResult {
@@ -318,6 +329,28 @@ pub struct JwpPresentInitResult {
   /// One challenge per key binding key, already prehashed - hand each
   /// straight to the authenticator. See `PROFILE.md` DELTA 3.
   pub keybind_challenges: Vec<Vec<u8>>,
+}
+
+/// The holder's own claims, turned into the messages it commits to.
+///
+/// The wallet's first step in blind issuance. It has claims by name and
+/// needs the ordered octet strings [`commit_init`] takes, in the same order
+/// the issuer will later assign message indices in - otherwise the
+/// credential's map names one claim while the signature covers another.
+///
+/// Note what is NOT needed here: the issuer's message count. Indices go in
+/// the header's map, which the issuer builds; the message octets are just
+/// the claim values, so the wallet can commit before it knows how many
+/// claims the issuer will add.
+///
+/// Returns the pointers alongside the messages because the credential
+/// request must carry them - the issuer never sees these values and cannot
+/// name them itself.
+#[uniffi::export]
+pub fn jwp_committed_messages(claims_json: String) -> Result<JwpCommittedMessages, BbsFfiError> {
+  let claims: serde_json::Value = serde_json::from_str(&claims_json).map_err(|e| BbsFfiError(format!("claims are not valid JSON: {e}")))?;
+  let (_, messages, pointers) = crate::jwp::build_cmap(&claims, 0)?;
+  Ok(JwpCommittedMessages { messages, pointers })
 }
 
 /// Read a stored credential without verifying it.

@@ -293,6 +293,11 @@ RustBuffer uniffi_zk_cred_bbs_fn_func_jwp_accept(RustBuffer suite_id, RustBuffer
 RustBuffer uniffi_zk_cred_bbs_fn_func_jwp_build_presentation_header(RustBuffer nonce, RustBuffer aud, RustBuffer extra_json, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_FN_FUNC_JWP_COMMITTED_MESSAGES
+#define UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_FN_FUNC_JWP_COMMITTED_MESSAGES
+RustBuffer uniffi_zk_cred_bbs_fn_func_jwp_committed_messages(RustBuffer claims_json, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_FN_FUNC_JWP_INSPECT
 #define UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_FN_FUNC_JWP_INSPECT
 RustBuffer uniffi_zk_cred_bbs_fn_func_jwp_inspect(RustBuffer issued_jwp, RustCallStatus *_Nonnull out_status
@@ -617,6 +622,12 @@ uint16_t uniffi_zk_cred_bbs_checksum_func_jwp_accept(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_CHECKSUM_FUNC_JWP_BUILD_PRESENTATION_HEADER
 #define UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_CHECKSUM_FUNC_JWP_BUILD_PRESENTATION_HEADER
 uint16_t uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_CHECKSUM_FUNC_JWP_COMMITTED_MESSAGES
+#define UNIFFI_FFIDEF_UNIFFI_ZK_CRED_BBS_CHECKSUM_FUNC_JWP_COMMITTED_MESSAGES
+uint16_t uniffi_zk_cred_bbs_checksum_func_jwp_committed_messages(void
     
 );
 #endif

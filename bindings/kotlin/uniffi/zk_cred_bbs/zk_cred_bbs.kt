@@ -687,6 +687,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header(
     ): Int
+    external fun uniffi_zk_cred_bbs_checksum_func_jwp_committed_messages(
+    ): Int
     external fun uniffi_zk_cred_bbs_checksum_func_jwp_inspect(
     ): Int
     external fun uniffi_zk_cred_bbs_checksum_func_jwp_present_finalize(
@@ -736,6 +738,8 @@ internal object UniffiLib {
     external fun uniffi_zk_cred_bbs_fn_func_jwp_accept(`suiteId`: RustBuffer.ByValue,`issuedJwp`: RustBuffer.ByValue,`issuerPublicKey`: RustBuffer.ByValue,`committedMessages`: RustBuffer.ByValue,`keybindPublicKeys`: RustBuffer.ByValue,`secretProverBlind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_zk_cred_bbs_fn_func_jwp_build_presentation_header(`nonce`: RustBuffer.ByValue,`aud`: RustBuffer.ByValue,`extraJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_zk_cred_bbs_fn_func_jwp_committed_messages(`claimsJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_zk_cred_bbs_fn_func_jwp_inspect(`issuedJwp`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -885,6 +889,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_build_presentation_header() != 63085) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_committed_messages() != 7083) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_zk_cred_bbs_checksum_func_jwp_inspect() != 32872) {
@@ -1493,6 +1500,55 @@ public object FfiConverterTypeCommitInitResult: FfiConverterRustBuffer<CommitIni
             FfiConverterByteArray.write(value.`state`, buf)
             FfiConverterByteArray.write(value.`secretProverBlind`, buf)
             FfiConverterByteArray.write(value.`challenge`, buf)
+    }
+}
+
+
+
+/**
+ * Output of [`jwp_committed_messages`].
+ */
+data class JwpCommittedMessages (
+    /**
+     * The messages to hand to [`commit_init`], in order.
+     */
+    var `messages`: List<kotlin.ByteArray>
+    , 
+    /**
+     * Their RFC 6901 pointers, in the same order. These go in the credential
+     * request; the issuer needs them to build the credential's map and
+     * checks their count against the commitment.
+     */
+    var `pointers`: List<kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeJwpCommittedMessages: FfiConverterRustBuffer<JwpCommittedMessages> {
+    override fun read(buf: ByteBuffer): JwpCommittedMessages {
+        return JwpCommittedMessages(
+            FfiConverterSequenceByteArray.read(buf),
+            FfiConverterSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: JwpCommittedMessages) = (
+            FfiConverterSequenceByteArray.allocationSize(value.`messages`) +
+            FfiConverterSequenceString.allocationSize(value.`pointers`)
+    )
+
+    override fun write(value: JwpCommittedMessages, buf: ByteBuffer) {
+            FfiConverterSequenceByteArray.write(value.`messages`, buf)
+            FfiConverterSequenceString.write(value.`pointers`, buf)
     }
 }
 
@@ -2141,6 +2197,35 @@ public object FfiConverterSequenceTypeBbsDisclosure: FfiConverterRustBuffer<List
         FfiConverterString.lower(`nonce`),
         FfiConverterString.lower(`aud`),
         FfiConverterOptionalString.lower(`extraJson`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The holder's own claims, turned into the messages it commits to.
+         *
+         * The wallet's first step in blind issuance. It has claims by name and
+         * needs the ordered octet strings [`commit_init`] takes, in the same order
+         * the issuer will later assign message indices in - otherwise the
+         * credential's map names one claim while the signature covers another.
+         *
+         * Note what is NOT needed here: the issuer's message count. Indices go in
+         * the header's map, which the issuer builds; the message octets are just
+         * the claim values, so the wallet can commit before it knows how many
+         * claims the issuer will add.
+         *
+         * Returns the pointers alongside the messages because the credential
+         * request must carry them - the issuer never sees these values and cannot
+         * name them itself.
+         */
+    @Throws(BbsFfiException::class) fun `jwpCommittedMessages`(`claimsJson`: kotlin.String): JwpCommittedMessages {
+            return FfiConverterTypeJwpCommittedMessages.lift(
+    uniffiRustCallWithError(BbsFfiException) { _status ->
+    UniffiLib.uniffi_zk_cred_bbs_fn_func_jwp_committed_messages(
+    
+        
+        FfiConverterString.lower(`claimsJson`),_status)
 }
     )
     }
