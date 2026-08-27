@@ -308,6 +308,24 @@ impl<S: SignatureScheme> BlindSuite<S> {
   }
 
   #[allow(clippy::type_complexity)]
+  /// How many committed messages and key binding keys a commitment
+  /// carries, without verifying it.
+  ///
+  /// The issuer needs this before it signs. A commitment fixes the number
+  /// of messages the holder committed to, but `blind_sign` never looks at
+  /// the credential's own description of its message vector - it just
+  /// signs. So a header claiming two holder claims over a commitment
+  /// carrying one produces a perfectly well-formed signature over a vector
+  /// that means something other than what the header says, and the
+  /// mismatch surfaces later as a presentation that will not verify.
+  ///
+  /// Cheap, and no substitute for verification: `blind_sign` still
+  /// validates the commitment and every key binding proof of possession.
+  pub fn commitment_shape(&self, commitment_with_proof: &[u8]) -> Result<(usize, usize)> {
+    let (_, keybind_public_keys, _, m_hat, _, _) = octets_to_commitment_with_proof(commitment_with_proof, self.sig.signature_length())?;
+    Ok((m_hat.len(), keybind_public_keys.len()))
+  }
+
   fn deserialize_and_validate_commit(&self, commitment_with_proof: &[u8]) -> Result<(G1Projective, Vec<G1Projective>, Vec<G1Projective>)> {
     let (c, keybind_public_keys, s_hat, m_hat, challenge, keybind_signatures) =
       octets_to_commitment_with_proof(commitment_with_proof, self.sig.signature_length())?;

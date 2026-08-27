@@ -13,13 +13,27 @@
 //!
 //! Unlike the other two crates, `vc` needs this on **both** sides:
 //!
-//! * the **issuer** calls [`zk_cred_bbs_blind_sign`], which verifies the
+//! * the **issuer** calls [`zk_cred_bbs_jwp_issue`], which verifies the
 //!   holder's commitment (including the authenticator's proof of
-//!   possession) and then blind-signs it;
-//! * the **verifier** calls [`zk_cred_bbs_blind_proof_verify`].
+//!   possession), blind-signs it, and returns a finished credential;
+//! * the **verifier** calls [`zk_cred_bbs_jwp_verify`].
 //!
 //! Nothing on the holder's side is exposed here — no Go service ever
 //! commits or proves.
+//!
+//! ## Prefer the container functions to the raw algebra
+//!
+//! [`zk_cred_bbs_blind_sign`] and [`zk_cred_bbs_blind_proof_verify`] take
+//! and return an ordered list of opaque messages. They are still exported,
+//! because they are the primitives and a test harness wants them, but a
+//! service should call [`zk_cred_bbs_jwp_issue`] and
+//! [`zk_cred_bbs_jwp_verify`] instead.
+//!
+//! The reason is the mapping from named claims to that message list. It has
+//! to be byte-identical in the issuer, the wallet and the verifier, and when
+//! it is not, every proof fails with nothing in the failure pointing at the
+//! cause. Doing it in Go would be a second implementation of the thing most
+//! worth having only one of.
 //!
 //! ## No handles
 //!
@@ -57,6 +71,11 @@ pub const ZK_CRED_BBS_OK: i32 = 0;
 pub const ZK_CRED_BBS_ERR: i32 = -1;
 /// Status: a panic was caught crossing the FFI boundary.
 pub const ZK_CRED_BBS_PANIC: i32 = -2;
+
+/// Key binding selector: the credential is bound to no device key.
+pub const ZK_CRED_BBS_KEYBIND_NONE: u32 = 0;
+/// Key binding selector: this profile's Schnorr-on-BLS12-381-G1 binding.
+pub const ZK_CRED_BBS_KEYBIND_SCHNORR: u32 = 1;
 
 /// Suite selector, matching `BbsSuiteId` in `ffi_api.rs`.
 pub const ZK_CRED_BBS_SUITE_PLAIN: u32 = 0;
@@ -155,6 +174,70 @@ unsafe fn read_byte_array(ptrs: *const *const u8, lens: *const usize, count: usi
     out.push(unsafe { bytes_or_empty(ptrs[i], lens[i], what) }?.to_vec());
   }
   Ok(out)
+}
+
+/// Reads a UTF-8 string argument.
+///
+/// Separate from `bytes_or_empty` because a Go caller can hand over bytes
+/// that are not valid UTF-8, and finding that out here - by name - beats
+/// finding out inside a JSON parser.
+///
+/// # Safety
+///
+/// `ptr` must describe `len` valid initialized bytes, or be null with
+/// `len == 0`.
+unsafe fn utf8_or_empty<'a>(ptr: *const u8, len: usize, what: &'static str) -> Result<&'a str, Error> {
+  // SAFETY: delegated to this function's own contract.
+  let bytes = unsafe { bytes_or_empty(ptr, len, what) }?;
+  std::str::from_utf8(bytes).map_err(|_| Error::MalformedContainer(format!("{what} is not valid UTF-8")))
+}
+
+/// The tail every buffer-returning entry point shares: hand an owned buffer
+/// to the caller, or report the error, or report the caught panic.
+///
+/// Factored out because getting it subtly different per function is exactly
+/// how one of them ends up leaking or double-freeing.
+///
+/// # Safety
+///
+/// `out`/`len_out` must be non-null and writable; `error_out` may be null.
+unsafe fn finish_buffer(
+  result: std::thread::Result<Result<Vec<u8>, Error>>,
+  out: *mut *mut u8,
+  len_out: *mut usize,
+  error_out: *mut *mut c_char,
+  what: &str,
+) -> i32 {
+  match result {
+    Ok(Ok(buffer)) => {
+      if out.is_null() || len_out.is_null() {
+        // SAFETY: delegated to this function's own contract.
+        unsafe { set_error_out(error_out, &format!("{what} out-parameters must not be null")) };
+        return ZK_CRED_BBS_ERR;
+      }
+      let mut boxed = buffer.into_boxed_slice();
+      let ptr = boxed.as_mut_ptr();
+      let len = boxed.len();
+      std::mem::forget(boxed);
+      // SAFETY: as above.
+      unsafe {
+        *out = ptr;
+        *len_out = len;
+        clear_error_out(error_out);
+      }
+      ZK_CRED_BBS_OK
+    }
+    Ok(Err(e)) => {
+      // SAFETY: as above.
+      unsafe { set_error_out(error_out, &e.to_string()) };
+      ZK_CRED_BBS_ERR
+    }
+    Err(panic) => {
+      // SAFETY: as above.
+      unsafe { set_error_out(error_out, &panic_message(&*panic)) };
+      ZK_CRED_BBS_PANIC
+    }
+  }
 }
 
 fn suite_for(selector: u32) -> Result<BlindSuite<SchnorrBls12381>, Error> {
@@ -257,6 +340,207 @@ pub unsafe extern "C" fn zk_cred_bbs_blind_sign(
       ZK_CRED_BBS_PANIC
     }
   }
+}
+
+/// Issue a credential — the issuer's entry point.
+///
+/// Verifies the holder's commitment, blind-signs it together with the
+/// issuer's own claims, and returns a finished JWP in Compact
+/// Serialization, ready to hand to the wallet.
+///
+/// The two JSON inputs are asymmetric on purpose:
+///
+/// * `issuer_claims_json` is a JSON **object** — the claims the issuer
+///   asserts, values and all.
+/// * `holder_pointers_json` is a JSON **array of RFC 6901 pointer
+///   strings** — the names of the claims the holder committed to. The
+///   issuer never sees those values; it only needs to know where they sit
+///   in the message vector, and the count must match what the holder
+///   actually committed or the signature covers a different vector than
+///   the wallet thinks.
+///
+/// Pass an empty array (`[]`) for a credential with no holder-committed
+/// claims.
+///
+/// `extra_header_json`, if non-null, is a JSON object merged into the
+/// Issuer Header — `iss`, `iat`, `exp` and the like. It may not restate
+/// `alg`, `vct`, `kb`, `cmap` or `hcmap`.
+///
+/// On success writes an owned NUL-free UTF-8 buffer (the compact JWP) to
+/// `jwp_out`/`jwp_len_out`, released with [`zk_cred_bbs_free_buffer`].
+///
+/// # Safety
+///
+/// As [`zk_cred_bbs_blind_sign`]. Every `*_json` and `vct` pointer must
+/// describe valid UTF-8 of the stated length; `extra_header_json` may be
+/// null (with length 0).
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn zk_cred_bbs_jwp_issue(
+  suite: u32,
+  secret_key: *const u8,
+  secret_key_len: usize,
+  public_key: *const u8,
+  public_key_len: usize,
+  commitment_with_proof: *const u8,
+  commitment_with_proof_len: usize,
+  vct: *const u8,
+  vct_len: usize,
+  issuer_claims_json: *const u8,
+  issuer_claims_json_len: usize,
+  holder_pointers_json: *const u8,
+  holder_pointers_json_len: usize,
+  extra_header_json: *const u8,
+  extra_header_json_len: usize,
+  keybind: u32,
+  jwp_out: *mut *mut u8,
+  jwp_len_out: *mut usize,
+  error_out: *mut *mut c_char,
+) -> i32 {
+  let result = std::panic::catch_unwind(|| -> Result<Vec<u8>, Error> {
+    // SAFETY: pointer validity is part of this function's safety contract.
+    let sk_bytes = unsafe { bytes_or_empty(secret_key, secret_key_len, "secret_key") }?;
+    let pk = unsafe { bytes_or_empty(public_key, public_key_len, "public_key") }?;
+    let commitment = unsafe { bytes_or_empty(commitment_with_proof, commitment_with_proof_len, "commitment_with_proof") }?;
+    let vct = unsafe { utf8_or_empty(vct, vct_len, "vct") }?;
+    let issuer_claims_raw = unsafe { utf8_or_empty(issuer_claims_json, issuer_claims_json_len, "issuer_claims_json") }?;
+    let holder_pointers_raw = unsafe { utf8_or_empty(holder_pointers_json, holder_pointers_json_len, "holder_pointers_json") }?;
+    let extra_raw = if extra_header_json.is_null() {
+      "{}"
+    } else {
+      unsafe { utf8_or_empty(extra_header_json, extra_header_json_len, "extra_header_json") }?
+    };
+
+    let issuer_claims: serde_json::Value =
+      serde_json::from_str(issuer_claims_raw).map_err(|e| Error::MalformedContainer(format!("issuer_claims_json: {e}")))?;
+    let holder_pointers: Vec<String> =
+      serde_json::from_str(holder_pointers_raw).map_err(|e| Error::MalformedContainer(format!("holder_pointers_json: {e}")))?;
+    let extra: serde_json::Map<String, serde_json::Value> = serde_json::from_str::<serde_json::Value>(extra_raw)
+      .map_err(|e| Error::MalformedContainer(format!("extra_header_json: {e}")))?
+      .as_object()
+      .cloned()
+      .ok_or_else(|| Error::MalformedContainer("extra_header_json is not a JSON object".into()))?;
+
+    let (cmap, issuer_messages, _) = crate::jwp::build_cmap(&issuer_claims, 0)?;
+
+    // The header must describe the same message vector the commitment
+    // actually fixes. `blind_sign` will not catch a disagreement - it
+    // never sees the header's map, so it signs happily and the credential
+    // only fails much later, at a presentation, with nothing pointing at
+    // the cause.
+    let suite = suite_for(suite)?;
+    let (committed_count, keybind_count) = suite.commitment_shape(commitment)?;
+    if holder_pointers.len() != committed_count {
+      return Err(Error::MalformedContainer(format!(
+        "{} holder claim pointers were supplied but the commitment carries {committed_count} committed messages",
+        holder_pointers.len()
+      )));
+    }
+
+    let hcmap = if holder_pointers.is_empty() {
+      None
+    } else {
+      Some(crate::jwp::build_cmap_from_pointers(&holder_pointers, issuer_messages.len())?)
+    };
+    // The key binding identifier is not a free-text field: it decides the
+    // message layout, so it is selected by the same flag that decides
+    // whether there are key binding keys at all.
+    let kb = match keybind {
+      ZK_CRED_BBS_KEYBIND_NONE => None,
+      ZK_CRED_BBS_KEYBIND_SCHNORR => Some(crate::jwp::KB_SCHNORR),
+      _ => return Err(Error::Unsupported("unknown keybind selector")),
+    };
+    // Same argument as the message count: `kb` decides the layout a
+    // verifier will read the credential under, so it may not disagree with
+    // what the commitment actually binds.
+    if kb.is_some() != (keybind_count > 0) {
+      return Err(Error::MalformedContainer(format!(
+        "the key binding selector says {} but the commitment carries {keybind_count} key binding keys",
+        if kb.is_some() { "bound" } else { "unbound" }
+      )));
+    }
+    let issuer_header = crate::jwp::build_issuer_header(vct, cmap, hcmap, kb, &extra)?;
+
+    let sk = crate::bbs::scalar_from_be(sk_bytes)?;
+    let signature = suite.blind_sign(&sk, pk, commitment, &issuer_header, &issuer_messages)?;
+
+    Ok(
+      crate::jwp::IssuedJwp {
+        issuer_header,
+        payloads: issuer_messages,
+        signature,
+      }
+      .encode()
+      .into_bytes(),
+    )
+  });
+  unsafe { finish_buffer(result, jwp_out, jwp_len_out, error_out, "jwp") }
+}
+
+/// Verify a presentation and return what it disclosed — the relying
+/// party's entry point.
+///
+/// On success writes an owned UTF-8 JSON document to `result_out`:
+///
+/// ```json
+/// {"vct":"...","disclosed":[{"pointer":"/given_name","value":"Alice"}]}
+/// ```
+///
+/// `value` is the claim's real JSON value, not a string wrapping it, so a
+/// number stays a number. Only claims the proof actually covers appear;
+/// withheld ones are absent rather than null.
+///
+/// Returns [`ZK_CRED_BBS_ERR`] for any verification failure, with a coarse
+/// message - never the offending values.
+///
+/// # Safety
+///
+/// As [`zk_cred_bbs_jwp_issue`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn zk_cred_bbs_jwp_verify(
+  suite: u32,
+  presented_jwp: *const u8,
+  presented_jwp_len: usize,
+  public_key: *const u8,
+  public_key_len: usize,
+  result_out: *mut *mut u8,
+  result_len_out: *mut usize,
+  error_out: *mut *mut c_char,
+) -> i32 {
+  let result = std::panic::catch_unwind(|| -> Result<Vec<u8>, Error> {
+    // SAFETY: pointer validity is part of this function's safety contract.
+    let compact = unsafe { utf8_or_empty(presented_jwp, presented_jwp_len, "presented_jwp") }?;
+    let pk = unsafe { bytes_or_empty(public_key, public_key_len, "public_key") }?;
+
+    let presented = crate::jwp::PresentedJwp::decode(compact)?;
+    let view = presented.header()?;
+    let disclosures = presented.disclosures();
+
+    suite_for(suite)?.blind_proof_verify(
+      pk,
+      &presented.proof,
+      &presented.issuer_header,
+      &presented.presentation_header,
+      view.num_signer_messages(),
+      &presented.disclosed_messages(),
+      &disclosures,
+    )?;
+
+    // Only reached once the proof verified, so every pointer/value pair
+    // below is one the issuer actually signed.
+    let pointers = view.pointers();
+    let mut disclosed = Vec::new();
+    for (index, payload) in presented.payloads.iter().enumerate() {
+      if let Some(bytes) = payload {
+        let value: serde_json::Value =
+          serde_json::from_slice(bytes).map_err(|e| Error::MalformedContainer(format!("disclosed claim is not valid JSON: {e}")))?;
+        disclosed.push(serde_json::json!({"pointer": pointers[index], "value": value}));
+      }
+    }
+    let doc = serde_json::json!({"vct": view.vct, "disclosed": disclosed});
+    serde_json::to_vec(&doc).map_err(|e| Error::MalformedContainer(format!("encoding result: {e}")))
+  });
+  unsafe { finish_buffer(result, result_out, result_len_out, error_out, "result") }
 }
 
 /// Verify a presentation — the relying party's entry point.

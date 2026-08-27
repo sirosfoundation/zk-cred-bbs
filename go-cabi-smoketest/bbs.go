@@ -17,6 +17,7 @@ package bbs
 import "C"
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -208,4 +209,174 @@ func (Native) VerifyProof(suite Suite, publicKey, proof, header, presentationHea
 	}
 	takeError(errOut)
 	return nil
+}
+
+// KeyBinding selects the credential's device-binding layout, and therefore
+// which message indices are reserved.
+type KeyBinding uint32
+
+const (
+	// NoKeyBinding issues a credential bound to no device key.
+	NoKeyBinding KeyBinding = C.ZK_CRED_BBS_KEYBIND_NONE
+	// SchnorrKeyBinding is this profile's Schnorr-on-BLS12-381-G1 binding.
+	SchnorrKeyBinding KeyBinding = C.ZK_CRED_BBS_KEYBIND_SCHNORR
+)
+
+// IssueParams is everything the issuer supplies to produce a credential.
+type IssueParams struct {
+	Suite Suite
+
+	// SecretKey and PublicKey are the issuer's BBS key pair. Note this
+	// cannot be a pki.Signer or a PKCS#11 key: a BBS secret key is a
+	// BLS12-381 scalar consumed inside the signing algebra, not something
+	// that signs a digest, and mainstream HSMs do not implement the curve.
+	SecretKey []byte
+	PublicKey []byte
+
+	// Commitment is the holder's commitment_with_proof, carrying the
+	// messages the issuer never sees and the key binding public keys,
+	// together with proof the holder actually holds those keys.
+	Commitment []byte
+
+	// Vct is the SD-JWT VC credential type identifier.
+	Vct string
+
+	// IssuerClaims is a JSON object: the claims the issuer asserts.
+	IssuerClaims json.RawMessage
+
+	// HolderPointers names the claims the holder committed to, as RFC 6901
+	// pointers. The issuer never sees those values - it only needs to know
+	// where they sit in the message vector. The count must match what the
+	// holder actually committed, or the signature covers a different vector
+	// than the wallet believes it does.
+	HolderPointers []string
+
+	// ExtraHeader, if non-empty, is a JSON object merged into the Issuer
+	// Header (iss, iat, exp, ...). It may not restate alg, vct, kb, cmap or
+	// hcmap.
+	ExtraHeader json.RawMessage
+
+	// KeyBinding must agree with whether Commitment carries key binding
+	// keys: it selects the message layout.
+	KeyBinding KeyBinding
+}
+
+// Issuer is the issuer-side seam for the whole credential, as opposed to
+// BlindSigner's raw algebra. Prefer this: the mapping from named claims to
+// BBS messages lives on the Rust side precisely so the issuer, the wallet
+// and the verifier cannot derive it differently.
+type Issuer interface {
+	Issue(p IssueParams) (string, error)
+}
+
+// PresentationVerifier is the verifier-side seam for a whole presentation.
+type PresentationVerifier interface {
+	VerifyPresentation(suite Suite, presentedJWP string, publicKey []byte) (*Presentation, error)
+}
+
+// DisclosedClaim is one claim a verifier learned from a presentation.
+type DisclosedClaim struct {
+	// Pointer is the claim's RFC 6901 pointer within the credential.
+	Pointer string `json:"pointer"`
+	// Value is the claim's JSON value, so a number stays a number.
+	Value json.RawMessage `json:"value"`
+}
+
+// Presentation is what a verified presentation revealed. Withheld claims
+// are absent rather than null - the verifier does not learn their values at
+// all.
+type Presentation struct {
+	Vct       string           `json:"vct"`
+	Disclosed []DisclosedClaim `json:"disclosed"`
+}
+
+var (
+	_ Issuer               = Native{}
+	_ PresentationVerifier = Native{}
+)
+
+// Issue verifies the holder's commitment and returns a finished credential
+// in JWP Compact Serialization.
+func (Native) Issue(p IssueParams) (string, error) {
+	issuerClaims := p.IssuerClaims
+	if len(issuerClaims) == 0 {
+		issuerClaims = json.RawMessage("{}")
+	}
+	// Marshaling here rather than accepting a pre-encoded string keeps the
+	// "[]" case - a credential with no committed claims - from having to be
+	// spelled by every caller.
+	pointers, err := json.Marshal(p.HolderPointers)
+	if err != nil {
+		return "", fmt.Errorf("bbs: encoding holder pointers: %w", err)
+	}
+
+	skPtr, skLen := cBytes(p.SecretKey)
+	pkPtr, pkLen := cBytes(p.PublicKey)
+	comPtr, comLen := cBytes(p.Commitment)
+	vctPtr, vctLen := cBytes([]byte(p.Vct))
+	claimsPtr, claimsLen := cBytes(issuerClaims)
+	ptrsPtr, ptrsLen := cBytes(pointers)
+	extraPtr, extraLen := cBytes(p.ExtraHeader)
+
+	var out *C.uint8_t
+	var outLen C.size_t
+	var errOut *C.char
+
+	status := C.zk_cred_bbs_jwp_issue(
+		C.uint32_t(p.Suite),
+		skPtr, skLen, pkPtr, pkLen, comPtr, comLen,
+		vctPtr, vctLen,
+		claimsPtr, claimsLen,
+		ptrsPtr, ptrsLen,
+		extraPtr, extraLen,
+		C.uint32_t(p.KeyBinding),
+		&out, &outLen, &errOut,
+	)
+	runtime.KeepAlive(p.SecretKey)
+	runtime.KeepAlive(p.PublicKey)
+	runtime.KeepAlive(p.Commitment)
+	runtime.KeepAlive(p.Vct)
+	runtime.KeepAlive(issuerClaims)
+	runtime.KeepAlive(pointers)
+	runtime.KeepAlive(p.ExtraHeader)
+
+	if status != C.ZK_CRED_BBS_OK {
+		return "", statusError(status, takeError(errOut))
+	}
+	takeError(errOut)
+	jwp := C.GoBytes(unsafe.Pointer(out), C.int(outLen))
+	C.zk_cred_bbs_free_buffer(out, outLen)
+	return string(jwp), nil
+}
+
+// VerifyPresentation returns what the presentation disclosed, or an error
+// if it does not verify. A non-nil result means the issuer really signed
+// every claim in it.
+func (Native) VerifyPresentation(suite Suite, presentedJWP string, publicKey []byte) (*Presentation, error) {
+	jwpBytes := []byte(presentedJWP)
+	jwpPtr, jwpLen := cBytes(jwpBytes)
+	pkPtr, pkLen := cBytes(publicKey)
+
+	var out *C.uint8_t
+	var outLen C.size_t
+	var errOut *C.char
+
+	status := C.zk_cred_bbs_jwp_verify(
+		C.uint32_t(suite), jwpPtr, jwpLen, pkPtr, pkLen, &out, &outLen, &errOut,
+	)
+	runtime.KeepAlive(jwpBytes)
+	runtime.KeepAlive(publicKey)
+
+	if status != C.ZK_CRED_BBS_OK {
+		return nil, statusError(status, takeError(errOut))
+	}
+	takeError(errOut)
+	raw := C.GoBytes(unsafe.Pointer(out), C.int(outLen))
+	C.zk_cred_bbs_free_buffer(out, outLen)
+
+	var p Presentation
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("bbs: decoding verification result: %w", err)
+	}
+	return &p, nil
 }
