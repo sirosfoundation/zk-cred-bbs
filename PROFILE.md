@@ -51,8 +51,8 @@ Derived generator domains, all prefixes on the blind api_id:
 
 ## 3. Deviations from the CFRG PR
 
-All four are accommodations to the YubiKey prototype. Each is marked
-`DELTA n` in the source.
+Each is marked `DELTA n` in the source. Three are accommodations to the
+YubiKey prototype; DELTA 3 turns out not to be — see its own note.
 
 ### DELTA 1 — BP1 as the first key binding generator
 
@@ -70,18 +70,35 @@ The Schnorr nonce point `R` is hashed as `0x04 || x || y` (97 octets),
 **not** BBS's 48-octet Zcash-compact form, because that is what the
 firmware hashes. (`src/keybind.rs`, `serialize_nonce_point`.)
 
-### DELTA 3 — SHA-256 prehash of the key binding challenge
+### DELTA 3 — prehash of the key binding challenge
 
 The challenge is `serialize([randomized_key, challenge_scalar])` = 48 + 32 =
-80 octets, over the prototype's 64-octet ceiling, so the authenticator is
-handed `SHA-256(that)` = 32 octets. (`src/blind.rs`, `blind_proof_gen_init`
-and `blind_core_proof_verify`.)
+80 octets, over the authenticator's input ceiling, so it is handed
+`SHA-256(that)` = 32 octets. (`src/blind.rs`, `blind_proof_gen_init` and
+`blind_core_proof_verify`.)
 
-**Open concern, to raise with Emil:** this prehash carries no domain
-separation tag. The authenticator ends up signing a bare 32-octet digest it
-cannot interpret — a signing oracle if that key handle is ever reachable
-from another context. A DST and a per-key-handle scoping rule are worth
-adding before this is anything but a prototype.
+**Not a prototype artifact — reclassify it.** Emil answered both halves of
+this on 2026-08-27:
+
+- **The 64-octet ceiling belongs to 5.8.1-alpha0, not to previewSign**,
+  which imposes no input-size limit of its own. But some bound will likely
+  always exist on a hardware signer — "definitely not above 1 kB", his
+  guess ≤128 octets — so **a prehash stays in the spec regardless**, for
+  wide hardware-signer compatibility rather than as a workaround for one
+  firmware build.
+- **The missing DST is going to CFRG** alongside the ceiling question. The
+  likely outcome is `BBS.hash_to_scalar` (or similar) in place of bare
+  SHA-256, which brings a DST with it.
+
+So expect the prehash to *stay* and its *form* to change. That is a wire
+change and needs a profile-version bump when it lands (§2's
+`siros-bbs-kb-schnorr-v0`), not a silent swap.
+
+Worth being precise about the blast radius: `hash_to_scalar` output
+serializes to 32 octets, the same width as a SHA-256 digest, so the
+authenticator-facing contract — *sign exactly 32 octets* — does not move.
+The change is confined to how this crate computes the challenge; nothing in
+the WSCD layer or on the CTAP2 wire changes with it.
 
 ### DELTA 4 — key binding public keys are negated
 

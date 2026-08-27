@@ -14,16 +14,17 @@ These matter because we've implemented all four on the strength of one
 captured vector, and three of them look like accommodations that could
 change under us.
 
-1. **Is the 64-octet `tbs` ceiling a property of 5.8.1-alpha0, or of
-   previewSign itself?** If a later build lifts it, does the SHA-256
-   prehash of the key binding challenge go away — and would you treat that
-   as a wire-format change, or keep the prehash regardless?
+1. ~~**Is the 64-octet `tbs` ceiling a property of 5.8.1-alpha0, or of
+   previewSign itself?**~~ **ANSWERED 2026-08-27:** the ceiling is
+   5.8.1-alpha0's; previewSign imposes no input-size limit. Some bound will
+   likely always exist though — "definitely not above 1 kB", guess ≤128
+   octets — so a prehash stays in the spec for wide hardware-signer
+   compatibility. See `PROFILE.md` DELTA 3.
 
-2. **The prehash carries no domain separation tag** —
-   `SHA-256(serialize([PK_tilde, challenge]))`. Deliberate? The token will
-   Schnorr-sign any 32-octet blob under that key handle, so a DST plus a
-   per-key-handle scoping rule looks worth having before this is more than
-   a prototype. Is there a reason not to?
+2. ~~**The prehash carries no domain separation tag.**~~ **ANSWERED
+   2026-08-27:** going to CFRG alongside (1); likely outcome is
+   `BBS.hash_to_scalar` or similar, which carries a DST. Expect the
+   prehash's *form* to change while the prehash itself stays.
 
 3. **The SEC1 uncompressed nonce encoding** — is that the firmware's own
    serialization of `R`, or a choice in the TS to match it? It decides
