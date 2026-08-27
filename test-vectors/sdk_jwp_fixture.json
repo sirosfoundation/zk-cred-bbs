@@ -3,7 +3,26 @@
   "cases": {
     "plain": {
       "issued_jwp": "eyJhbGciOiJCQlMtTU9EIiwidmN0IjoiaHR0cHM6Ly9leGFtcGxlLnRlc3QvaWQtY2FyZCIsImNtYXAiOnsiYWRkcmVzcyI6eyJjb3VudHJ5IjpbMCxmYWxzZV0sImxvY2FsaXR5IjpbMSxmYWxzZV19LCJiaXJ0aF9kYXRlIjpbMixmYWxzZV0sImZhbWlseV9uYW1lIjpbMyxmYWxzZV0sImdpdmVuX25hbWUiOls0LGZhbHNlXSwibmF0aW9uYWxpdGllcyI6eyIwIjpbNSxmYWxzZV0sIjEiOls2LGZhbHNlXX19LCJoY21hcCI6eyJkZXZpY2VfcGluX2hhc2giOls3LGZhbHNlXX0sImlzcyI6Imh0dHBzOi8vaXNzdWVyLnRlc3QifQ.IlNFIg~IlN0b2NraG9sbSI~IjE5OTAtMDEtMzEi~IkFuZGVyc3NvbiI~IkFsaWNlIg~IlNFIg~IkpQIg.lJQ5BcF89SpOuNES9_kciiw0lOV0f6HIhC8sGLiq0xUZh8N23PNAdkmSxy3HL7VPOfaPScQ-wdYGlPGDqw64HSNT7KsPxFKXAYv6PABUWDI",
+      "commitment": "000000000000000100000000000000008175bc33f714a6391ff7bc72c8af521f1add6ace0b7c74726f4aa47da46ef9eb9f7a0d79814bdc14acd08e066c550a2f67af9a6269eb5ed04b7a05c8b7bbcd8847803263851665db653bdbdf2c31e96428dd3d21f86c785744267ec3cb822542c022bf0a4a589d7e723cce2dbef514ab07f5d118d19174ad93cb74479ed3905f29edcce52c6054a2eb906494925c8ebc",
+      "issuer_claims": {
+        "given_name": "Alice",
+        "family_name": "Andersson",
+        "birth_date": "1990-01-31",
+        "address": {
+          "country": "SE",
+          "locality": "Stockholm"
+        },
+        "nationalities": [
+          "SE",
+          "JP"
+        ]
+      },
+      "holder_pointers": [
+        "/device_pin_hash"
+      ],
+      "presented_jwp": "eyJhbGciOiJCQlMtTU9EIiwibm9uY2UiOiJmaXh0dXJlLW5vbmNlIiwiYXVkIjoiaHR0cHM6Ly92ZXJpZmllci50ZXN0In0.eyJhbGciOiJCQlMtTU9EIiwidmN0IjoiaHR0cHM6Ly9leGFtcGxlLnRlc3QvaWQtY2FyZCIsImNtYXAiOnsiYWRkcmVzcyI6eyJjb3VudHJ5IjpbMCxmYWxzZV0sImxvY2FsaXR5IjpbMSxmYWxzZV19LCJiaXJ0aF9kYXRlIjpbMixmYWxzZV0sImZhbWlseV9uYW1lIjpbMyxmYWxzZV0sImdpdmVuX25hbWUiOls0LGZhbHNlXSwibmF0aW9uYWxpdGllcyI6eyIwIjpbNSxmYWxzZV0sIjEiOls2LGZhbHNlXX19LCJoY21hcCI6eyJkZXZpY2VfcGluX2hhc2giOls3LGZhbHNlXX0sImlzcyI6Imh0dHBzOi8vaXNzdWVyLnRlc3QifQ.IlNFIg~~~~IkFsaWNlIg~~~.AAAAAAAAAfAAAAAAAAAAAAAAAAAAAAAApMpXhWzKb3iOjRLABPaOa7ty8_SBoFyqp83_Stq93ooPtpUw-5ZmR9erBaI8H6ifpuNNTwFxbW6RVHuMfGnszshzBI0dmr2Ej8_QcrRVKRhBVI-r6stoUTFvLEYTD1qLtSQFLtO6lZ2l1ZOzm-6NDqiyqkp5W28Wd9qzOD3y8Lr9B7G6pi4l8RyV5GIh5s-GFJXAoP99G8L8ugg6i04d2xbbMx5FkVWfUwPywTtUIp4VDxCVWuC9efGetiMeKuUqZtc6V2ke68mcqvL0mdfmbkqywDoXNnGFhHEb6G9KMTN1NIciQfMXN_JAxGPgdOVAbQtELMJaSbe7QbJ4FyYfYXkMZ2wZory-IDmu0RGzHPkb-0Tj-JsofWp5_PxquBeWHGxmXOBdoVE4__HAsUf_N1j1w8ycch3mfCNSkjBl6UY4pTvqzojRucQdO3zIFU3SK0APW7ciSxxEjUH1pURZacAu59To2GInDtnAVRH-KqYdklXgi8vIK0mxOdX_FTNmORyMsTpwy5AaPIY-HwRf4RdZN8FCHlG19PqpdLpGPRaTJufYDZziBJeVXqLS60v0MBvbSJdoF9UaafeU6kZCYg8eULGnH7as_6mX8XcSngpmDctYjSDx-kq0KdbJBazlh7sJVZJHqfFEcAbfDdU7YA",
       "issuer_pk": "966e8b9c8306ac737a5b587321b26101741b6d6a367eafb1febef54bc78cb6fd0abead4201a8461226ed6caa4c45d0a40ef54d6744d26ef3cd80d5453ce66ee43449c9cb184c5cfb70bc10973c888fd558570aaf2a240d365885c96a7053b56d",
+      "issuer_sk": "0000000000000000000000000000000000000000000000000000000000005150",
       "committed_messages": [
         "22306631653264336322"
       ],
@@ -24,7 +43,26 @@
     },
     "keybind": {
       "issued_jwp": "eyJhbGciOiJCQlMtTU9EIiwidmN0IjoiaHR0cHM6Ly9leGFtcGxlLnRlc3QvaWQtY2FyZCIsImtiIjoic2Nobm9yci1ibHMxMjM4MWcxLWNvbW1pdC12MCIsImNtYXAiOnsiYWRkcmVzcyI6eyJjb3VudHJ5IjpbMCxmYWxzZV0sImxvY2FsaXR5IjpbMSxmYWxzZV19LCJiaXJ0aF9kYXRlIjpbMixmYWxzZV0sImZhbWlseV9uYW1lIjpbMyxmYWxzZV0sImdpdmVuX25hbWUiOls0LGZhbHNlXSwibmF0aW9uYWxpdGllcyI6eyIwIjpbNSxmYWxzZV0sIjEiOls2LGZhbHNlXX19LCJoY21hcCI6eyJkZXZpY2VfcGluX2hhc2giOls3LGZhbHNlXX0sImlzcyI6Imh0dHBzOi8vaXNzdWVyLnRlc3QifQ.IlNFIg~IlN0b2NraG9sbSI~IjE5OTAtMDEtMzEi~IkFuZGVyc3NvbiI~IkFsaWNlIg~IlNFIg~IkpQIg.jEbtdkDA3TuiNfV7AKA3P4r52b1GT_oZNDA1_sA2nr28meF0B92TwtfMJT_zjl1uXGTF7BA18mXX_DD8mYTFAvtCLd0H_2RQRG5FbvifEoM",
+      "commitment": "00000000000000010000000000000001acfd38fe5dfc8759b36a242365cf281ffea0dffefabb8532942046e4690da666de060b1e2af9c034f930d727fbc2218aaca7e3849c1017504023ba22c3f2b1b9228336738d45c2024668b076c8501d6553fabc2b1ce0e402aa6ef2306588f50044c7c0c0d41c82f3f5755da99a8c5057f98ac2a800d886887c1d4afd55415c3a4cd6758661403ac63179db403cb62fbf430f25a7516845aac1a603b19a39cff852f8af1f09538bf0f9913d809db68a1f2739fdc42fcc0dc93cb5ce118ce39d2557ca1c2eb21bb8e12decb12773f026306272ca0aec2aad8df91e072570aaf5c722d637acb304bcd735008290b8f1e493e0dbbdbf88071aa6e154748cc3930f6d",
+      "issuer_claims": {
+        "given_name": "Alice",
+        "family_name": "Andersson",
+        "birth_date": "1990-01-31",
+        "address": {
+          "country": "SE",
+          "locality": "Stockholm"
+        },
+        "nationalities": [
+          "SE",
+          "JP"
+        ]
+      },
+      "holder_pointers": [
+        "/device_pin_hash"
+      ],
+      "presented_jwp": null,
       "issuer_pk": "966e8b9c8306ac737a5b587321b26101741b6d6a367eafb1febef54bc78cb6fd0abead4201a8461226ed6caa4c45d0a40ef54d6744d26ef3cd80d5453ce66ee43449c9cb184c5cfb70bc10973c888fd558570aaf2a240d365885c96a7053b56d",
+      "issuer_sk": "0000000000000000000000000000000000000000000000000000000000005150",
       "committed_messages": [
         "22306631653264336322"
       ],

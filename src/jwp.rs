@@ -323,6 +323,46 @@ pub fn build_cmap(claims: &Value, first_index: usize) -> Result<(Value, Vec<Vec<
   Ok((cmap, messages, pointers))
 }
 
+/// Builds a map from claim *pointers* alone, with no values.
+///
+/// The issuer's side of blind issuance. It never sees the holder's
+/// committed values - that is the point - but it must still place them in
+/// the message vector, and both sides must agree on where.
+///
+/// Agreement rests on both sides sorting by pointer, exactly as
+/// [`build_cmap`] does when the holder derives its committed messages from
+/// the values. Get this wrong and every proof fails with nothing pointing
+/// at the cause, so the ordering is not left to the caller's list order.
+pub fn build_cmap_from_pointers(pointers: &[String], first_index: usize) -> Result<Value> {
+  if pointers.is_empty() {
+    return Err(Error::MalformedContainer("no claim pointers were supplied".into()));
+  }
+  if pointers.len() > MAX_MESSAGES {
+    return Err(Error::MalformedContainer(format!(
+      "{} claim pointers, over the {MAX_MESSAGES} limit",
+      pointers.len()
+    )));
+  }
+  let mut sorted: Vec<&String> = pointers.iter().collect();
+  sorted.sort();
+  for pair in sorted.windows(2) {
+    if pair[0] == pair[1] {
+      return Err(Error::MalformedContainer(format!("claim pointer {} appears twice", pair[0])));
+    }
+  }
+
+  let mut cmap = Value::Object(Map::new());
+  for (i, pointer) in sorted.iter().enumerate() {
+    if !pointer.starts_with('/') && pointer.as_str() != "/" {
+      return Err(Error::MalformedContainer(format!(
+        "claim pointer {pointer} is not an RFC 6901 pointer (it must start with '/')"
+      )));
+    }
+    insert_at_pointer(&mut cmap, pointer, Value::Array(vec![(first_index + i).into(), Value::Bool(false)]))?;
+  }
+  Ok(cmap)
+}
+
 fn collect_leaves(prefix: &str, value: &Value, out: &mut Vec<(String, Value)>) {
   let pointer = || if prefix.is_empty() { "/".to_string() } else { prefix.to_string() };
   match value {

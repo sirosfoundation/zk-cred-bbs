@@ -26,6 +26,25 @@ use bls12_381_plus::{G1Projective, G2Projective, Scalar};
 
 const VCT: &str = "https://example.test/id-card";
 
+/// The claims every case in this file is built from.
+///
+/// A function rather than two literals so the fixture records exactly what
+/// was signed; a hand-copied duplicate would drift the moment either
+/// changed.
+fn issuer_claims_json() -> Value {
+  json!({
+    "given_name": "Alice",
+    "family_name": "Andersson",
+    "birth_date": "1990-01-31",
+    "address": {"country": "SE", "locality": "Stockholm"},
+    "nationalities": ["SE", "JP"],
+  })
+}
+
+fn holder_claims_json() -> Value {
+  json!({"device_pin_hash": "0f1e2d3c"})
+}
+
 fn issuer_key() -> (Scalar, Vec<u8>) {
   let sk = Scalar::from(0x5150_u64);
   (sk, serialize(&[Ser::G2(G2Projective::GENERATOR * sk)]))
@@ -35,6 +54,7 @@ fn issuer_key() -> (Scalar, Vec<u8>) {
 /// container plus the holder-side secrets that are not in it.
 struct Fixture {
   issued_jwp: String,
+  commitment: Vec<u8>,
   issuer_pk: Vec<u8>,
   committed_messages: Vec<Vec<u8>>,
   keybind_public_keys: Vec<Vec<u8>>,
@@ -52,14 +72,8 @@ fn issue(with_keybind: bool, seed: &str) -> Fixture {
   };
   let suite_id = if with_keybind { SCHNORR_SUITE_ID } else { PLAIN_SUITE_ID };
 
-  let issuer_claims = json!({
-    "given_name": "Alice",
-    "family_name": "Andersson",
-    "birth_date": "1990-01-31",
-    "address": {"country": "SE", "locality": "Stockholm"},
-    "nationalities": ["SE", "JP"],
-  });
-  let holder_claims = json!({"device_pin_hash": "0f1e2d3c"});
+  let issuer_claims = issuer_claims_json();
+  let holder_claims = holder_claims_json();
 
   let (cmap, issuer_messages, _) = jwp::build_cmap(&issuer_claims, 0).unwrap();
   let (hcmap, committed_messages, _) = jwp::build_cmap(&holder_claims, issuer_messages.len()).unwrap();
@@ -92,11 +106,11 @@ fn issue(with_keybind: bool, seed: &str) -> Fixture {
       };
       let commitment = suite.commit_finalize(&state, &sigs).unwrap();
       let signature = suite.blind_sign(&sk, &pk, &commitment, &issuer_header, &issuer_messages).unwrap();
-      (keybind_secret, keybind_public_keys, spb, signature)
+      (keybind_secret, keybind_public_keys, spb, signature, commitment)
     }};
   }
 
-  let (keybind_secret, keybind_public_keys, spb, signature) = if with_keybind { run!(SchnorrBls12381) } else { run!(NullScheme) };
+  let (keybind_secret, keybind_public_keys, spb, signature, commitment) = if with_keybind { run!(SchnorrBls12381) } else { run!(NullScheme) };
 
   let issued = jwp::IssuedJwp {
     issuer_header,
@@ -105,6 +119,7 @@ fn issue(with_keybind: bool, seed: &str) -> Fixture {
   };
   Fixture {
     issued_jwp: issued.encode(),
+    commitment,
     issuer_pk: pk,
     committed_messages,
     keybind_public_keys,
@@ -480,11 +495,46 @@ fn dump_sdk_fixture() {
   for (name, with_keybind) in [("plain", false), ("keybind", true)] {
     let f = issue(with_keybind, name);
     let info = jwp_inspect(f.issued_jwp.clone()).unwrap();
+
+    // A finished presentation, so a consumer that can only verify - the Go
+    // relying party - has something real to verify. Only for the
+    // no-keybind case: the other needs an authenticator signature, and a
+    // software stand-in in a published fixture would invite someone to
+    // treat it as a real one.
+    let presented = if with_keybind {
+      Value::Null
+    } else {
+      let ph = jwp_build_presentation_header("fixture-nonce".into(), "https://verifier.test".into(), None).unwrap();
+      let init = jwp_present_init(
+        BbsSuiteId::Plain,
+        f.issued_jwp.clone(),
+        f.issuer_pk.clone(),
+        ph,
+        vec!["/given_name".to_string(), "/address/country".to_string()],
+        f.committed_messages.clone(),
+        vec![],
+        f.secret_prover_blind.clone(),
+      )
+      .unwrap();
+      Value::String(jwp_present_finalize(BbsSuiteId::Plain, init.state, vec![]).unwrap())
+    };
+
     cases.insert(
       name.to_string(),
       json!({
         "issued_jwp": f.issued_jwp,
+        // The holder's commitment, so the issuer side can be exercised
+        // from Go - which cannot commit, since no Go service ever holds a
+        // credential.
+        "commitment": hex::encode(&f.commitment),
+        "issuer_claims": issuer_claims_json(),
+        "holder_pointers": ["/device_pin_hash"],
+        "presented_jwp": presented,
         "issuer_pk": hex::encode(&f.issuer_pk),
+        // The issuer's own key, so the Go issuer path can be exercised
+        // against exactly what Rust signed with. A fixed test value
+        // (Scalar::from(0x5150)), not a credential.
+        "issuer_sk": hex::encode(serialize(&[Ser::Scalar(issuer_key().0)])),
         "committed_messages": f.committed_messages.iter().map(hex::encode).collect::<Vec<_>>(),
         "keybind_public_keys": f.keybind_public_keys.iter().map(hex::encode).collect::<Vec<_>>(),
         "secret_prover_blind": hex::encode(&f.secret_prover_blind),
