@@ -157,9 +157,9 @@ fn the_helper_rejects_malformed_coordinates() {
 /// more than one input.
 #[test]
 fn the_captures_are_actually_distinct() {
-  for i in 1..CAPTURES.len() {
-    assert_ne!(CAPTURES[i].0, CAPTURES[0].0);
-    assert_ne!(CAPTURES[i].1, CAPTURES[0].1);
+  for capture in &CAPTURES[1..] {
+    assert_ne!(capture.0, CAPTURES[0].0);
+    assert_ne!(capture.1, CAPTURES[0].1);
   }
   // Every signed message is a 32-octet challenge, matching the profile.
   for (tbs, sig) in CAPTURES {
