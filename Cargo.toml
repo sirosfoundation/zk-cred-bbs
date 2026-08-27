@@ -1,6 +1,6 @@
 [package]
 name = "zk-cred-bbs"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 license = "BSD-2-Clause"
 description = "Blind BBS signatures with hardware key binding, for wallet credentials"
