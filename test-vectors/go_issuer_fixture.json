@@ -1,0 +1,4 @@
+{
+  "README": "The issuer's test signing key, for go-cabi-smoketest. A fixed constant (Scalar::from(0x5150)), not a credential. Kept out of sdk_jwp_fixture.json because that file is copied into two more public repositories where nothing uses it.",
+  "issuer_sk": "0000000000000000000000000000000000000000000000000000000000005150"
+}
