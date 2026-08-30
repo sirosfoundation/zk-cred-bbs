@@ -8,6 +8,10 @@ repository = "https://github.com/sirosfoundation/zk-cred-bbs"
 
 [features]
 uniffi = ["dep:uniffi"]
+# The bbs-keygen binary. Off by default so the iOS/Android cross builds -
+# which pass --features uniffi and build every target in the package - do
+# not compile a host-only CLI for a phone, and cannot fail a release on it.
+cli = []
 wasm = ["dep:wasm-bindgen", "dep:js-sys", "getrandom/wasm_js"]
 
 [dependencies]
@@ -32,6 +36,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 [[bin]]
 name = "bbs-keygen"
 path = "src/bin/bbs-keygen.rs"
+required-features = ["cli"]
 
 [[bin]]
 name = "uniffi-bindgen"
