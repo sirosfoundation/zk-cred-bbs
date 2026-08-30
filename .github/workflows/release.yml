@@ -51,6 +51,17 @@ jobs:
   bindings:
     name: Generate bindings
     runs-on: ubuntu-latest
+    # Gated on version-check, which it was not: that job's failure used to
+    # skip only Create Release, so a tag pointing at the wrong commit still
+    # published artifacts to GitHub Packages and npm. The guard protected
+    # the least consequential output and none of the ones consumers pull.
+    #
+    # always() is needed because version-check is tag-only - on
+    # workflow_dispatch it is skipped, and a plain `needs` would skip this
+    # too, taking away the manual packaging run this workflow exists to
+    # allow. Skipped is fine; failed is not.
+    needs: version-check
+    if: ${{ always() && needs.version-check.result != 'failure' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -173,6 +184,17 @@ jobs:
   wasm:
     name: Build browser package
     runs-on: ubuntu-latest
+    # Gated on version-check, which it was not: that job's failure used to
+    # skip only Create Release, so a tag pointing at the wrong commit still
+    # published artifacts to GitHub Packages and npm. The guard protected
+    # the least consequential output and none of the ones consumers pull.
+    #
+    # always() is needed because version-check is tag-only - on
+    # workflow_dispatch it is skipped, and a plain `needs` would skip this
+    # too, taking away the manual packaging run this workflow exists to
+    # allow. Skipped is fine; failed is not.
+    needs: version-check
+    if: ${{ always() && needs.version-check.result != 'failure' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
