@@ -24,7 +24,7 @@ use bls12_381_plus::group::Curve;
 use bls12_381_plus::{G2Projective, Scalar};
 
 use crate::error::{Error, Result};
-use crate::suite::{Suite, OCTET_SCALAR_LENGTH};
+use crate::suite::{OCTET_SCALAR_LENGTH, Suite};
 use crate::util::i2osp;
 
 /// `key_dst` default suffix — `api_id || "KEYGEN_DST_"` (§3.4.1).
