@@ -16,6 +16,7 @@ pub mod go_ffi;
 pub mod js_api;
 pub mod jwp;
 pub mod keybind;
+pub mod keygen;
 pub mod suite;
 pub mod util;
 

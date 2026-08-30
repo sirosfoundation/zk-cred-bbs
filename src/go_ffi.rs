@@ -607,6 +607,40 @@ pub unsafe extern "C" fn zk_cred_bbs_blind_proof_verify(
   }
 }
 
+/// Derives the public key belonging to a secret key — `SkToPk`
+/// (draft-irtf-cfrg-bbs-signatures-08 §3.4.2).
+///
+/// Exists so a holder of a key *pair* can check the two halves belong
+/// together. There is no cheaper stand-in: a length check confirms the
+/// widths and nothing about whether the pair is a pair, and signing with a
+/// mismatched one produces credentials that fail at every relying party
+/// reporting only "does not verify" — a failure with nothing in it pointing
+/// at the configuration. An issuer should call this once at startup rather
+/// than discover it on the first issuance.
+///
+/// Writes the 96-octet compressed G2 point to `public_key_out`, to be freed
+/// with [`zk_cred_bbs_free_buffer`].
+///
+/// # Safety
+///
+/// As [`zk_cred_bbs_jwp_issue`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn zk_cred_bbs_sk_to_pk(
+  secret_key: *const u8,
+  secret_key_len: usize,
+  public_key_out: *mut *mut u8,
+  public_key_len_out: *mut usize,
+  error_out: *mut *mut c_char,
+) -> i32 {
+  let result = std::panic::catch_unwind(|| -> Result<Vec<u8>, Error> {
+    // SAFETY: pointer validity is part of this function's safety contract.
+    let sk = unsafe { bytes_or_empty(secret_key, secret_key_len, "secret_key") }?;
+    crate::keygen::public_key_for(sk)
+  });
+  // SAFETY: out-parameter validity is part of this function's contract.
+  unsafe { finish_buffer(result, public_key_out, public_key_len_out, error_out, "zk_cred_bbs_sk_to_pk") }
+}
+
 /// Releases a buffer returned by this module.
 ///
 /// # Safety
