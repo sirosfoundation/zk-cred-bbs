@@ -61,7 +61,7 @@ MAVEN_GROUP     := org.siros
 MAVEN_ARTIFACT  := zk-cred-bbs
 MAVEN_LOCAL_DIR := $(HOME)/.m2/repository/$(subst .,/,$(MAVEN_GROUP))/$(MAVEN_ARTIFACT)/$(VERSION)
 
-.PHONY: all bindings-kotlin bindings-swift uniffi-lib go-cabi go-smoketest wasm \
+.PHONY: all bindings-kotlin bindings-swift uniffi-lib go-cabi go-smoketest keygen wasm \
         ios xcframework android aar pom publish-local check-go-header check-bindings \
         sdk-fixture clean FORCE
 
@@ -121,6 +121,12 @@ $(GO_CABI_DIR)/$(LIB_NAME).a: $(GO_CABI_DIR)/zk_cred_bbs_go.h FORCE
 $(GO_CABI_DIR)/zk_cred_bbs_go.h: include/zk_cred_bbs_go.h
 	@mkdir -p $(GO_CABI_DIR)
 	cp include/zk_cred_bbs_go.h $(GO_CABI_DIR)/
+
+# The operator-facing binary. Behind the `cli` feature so the cross builds
+# do not compile a host-only CLI for a phone.
+keygen:
+	cargo build --release --features cli --bin bbs-keygen
+	@echo "built: $(BUILD_DIR)/release/bbs-keygen"
 
 go-smoketest: go-cabi
 	cd go-cabi-smoketest && \

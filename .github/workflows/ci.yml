@@ -23,6 +23,11 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Clippy (uniffi)
         run: cargo clippy --all-targets --features uniffi -- -D warnings
+      # The keygen CLI is behind a feature, so --all-targets alone never
+      # compiles it. Without this it would rot unnoticed until an operator
+      # needed a key.
+      - name: Clippy (keygen CLI)
+        run: cargo clippy --all-targets --features cli -- -D warnings
       - name: Test
         run: cargo test --all-targets
 

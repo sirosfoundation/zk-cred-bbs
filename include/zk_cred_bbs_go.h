@@ -139,6 +139,22 @@ int32_t zk_cred_bbs_blind_proof_verify(uint32_t suite,
                                        size_t disclosures_len,
                                        char **error_out);
 
+/* Derive the public key belonging to a secret key - SkToPk,
+ * draft-irtf-cfrg-bbs-signatures-08 3.4.2.
+ *
+ * secret_key is the 32-octet big-endian scalar. On ZK_CRED_BBS_OK,
+ * *public_key_out / *public_key_len_out own the 96-octet compressed G2
+ * point, to be released with zk_cred_bbs_free_buffer.
+ *
+ * Intended for checking, once at startup, that a configured key PAIR really
+ * is one. Nothing cheaper does that job: matching widths says nothing about
+ * whether the halves belong together, and signing with a mismatched pair
+ * produces credentials that fail at every relying party reporting only
+ * "does not verify". */
+int32_t zk_cred_bbs_sk_to_pk(const uint8_t *secret_key, size_t secret_key_len,
+                             uint8_t **public_key_out, size_t *public_key_len_out,
+                             char **error_out);
+
 /* Release a buffer written to a *_out / *_len_out pair. */
 void zk_cred_bbs_free_buffer(uint8_t *ptr, size_t len);
 
