@@ -130,7 +130,7 @@ rather than being ported three more times:
 | Kotlin | `make bindings-kotlin` | `siros-sdk-kotlin` (AAR from GH Packages) |
 | Swift | `make bindings-swift` + `make xcframework` | `siros-sdk-swift` (XCFramework from the release) |
 | C ABI (cgo) | `make go-cabi` | `vc` issuer and verifier |
-| wasm | `make wasm` | `wallet-common` / `wallet-frontend` |
+| wasm | `make wasm` | `wallet-common` / `wallet-frontend`, via npm |
 
 `go-cabi-smoketest/` is a working Go binding over the C ABI, exercised
 against the reference vectors by `make go-smoketest`. It is written in the
@@ -140,6 +140,43 @@ so an out-of-process implementation stays a constructor swap.
 The C header is hand-written; `make check-go-header` fails the build if it
 drifts from `src/go_ffi.rs`, in addition to the compile-time assertions on
 the Rust side.
+
+### The browser package
+
+Published to npm as **`@sirosfoundation/zk-cred-bbs-wasm`**, one version per
+release tag, matching this org's other wasm modules.
+
+```
+npm install @sirosfoundation/zk-cred-bbs-wasm
+```
+
+```js
+import init, { commitInit, commitFinalize } from '@sirosfoundation/zk-cred-bbs-wasm';
+
+await init();                       // fetches the .wasm; initSync(bytes) off a filesystem
+const commit = commitInit('schnorr', committedMessages, keybindPublicKeys);
+// ...authenticator signs commit.challenge once per key binding key...
+const commitmentWithProof = commitFinalize('schnorr', commit.state, signatures);
+```
+
+`make wasm` builds it locally into `pkg/`. It has to go through the
+Makefile rather than a bare `wasm-pack build`: the browser target needs
+`RUSTFLAGS='--cfg getrandom_backend="wasm_js"'` or it has no entropy
+source, and the Makefile is the one place that knows that.
+
+`node tests/wasm_smoke.mjs` runs the built package — CI does this too,
+because checking that `pkg/zk_cred_bbs.js` exports the right names catches
+a renamed binding and nothing else. A package whose wasm fails to
+instantiate exports exactly the same symbols.
+
+**What is not in it yet.** The `jwp*` entry points — `jwpInspect`,
+`jwpAccept`, `jwpPresentInit`/`Finalize`, `jwpVerify`,
+`jwpBuildPresentationHeader`, `jwpCommittedMessages` — exist on the UniFFI
+and C ABI surfaces but not this one, so a browser client can build a
+commitment and prove over raw messages while the claim-to-message mapping
+would have to be reimplemented in TypeScript. That mapping is exactly what
+this crate exists to keep in one place, so treat the gap as temporary: see
+the migration plan's Stage 6.
 
 ### The two-phase API is not decoration
 

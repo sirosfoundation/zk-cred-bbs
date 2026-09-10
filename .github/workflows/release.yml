@@ -182,8 +182,16 @@ jobs:
             target/zk-cred-bbs-*.pom
 
   wasm:
-    name: Build browser package
+    name: Build & publish browser package (npm)
     runs-on: ubuntu-latest
+    # Same environment/permissions pair siros-wscd-manager's wasm job uses:
+    # `environment: npm` is where the registry credential lives, and
+    # id-token: write is what lets npm attach build provenance rather than
+    # taking the publisher's word for where the tarball came from.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
     # Gated on version-check, which it was not: that job's failure used to
     # skip only Create Release, so a tag pointing at the wrong commit still
     # published artifacts to GitHub Packages and npm. The guard protected
@@ -203,7 +211,43 @@ jobs:
       - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
         with:
           version: latest
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      # `make wasm`, not a bare wasm-pack: this crate needs
+      # RUSTFLAGS='--cfg getrandom_backend="wasm_js"' to build for the
+      # browser at all, and the Makefile is the one place that knows it.
       - run: make wasm
+      # wasm-pack derives the package name from the crate, so it comes out
+      # as bare `zk-cred-bbs` - which is not ours to publish and collides
+      # with the crates.io name. Renamed to the scoped package the rest of
+      # this org's wasm modules use.
+      #
+      # The version is taken from the tag rather than left as Cargo.toml's,
+      # even though the version-check job has already asserted the two
+      # match: this way the published version cannot disagree with the tag
+      # someone installed by, whatever happens upstream of here.
+      - name: Set package name and version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd pkg
+          jq --arg v "$VERSION" \
+            '.version = $v
+             | .name = "@sirosfoundation/zk-cred-bbs-wasm"
+             | .publishConfig = {"access": "public"}' \
+            package.json > tmp.json && mv tmp.json package.json
+          echo "publishing $(jq -r '.name + "@" + .version' package.json)"
+        if: startsWith(github.ref, 'refs/tags/')
+      # Tag-only. This workflow deliberately supports workflow_dispatch so
+      # the packaging path can be exercised without cutting a release, and
+      # there is no version to publish under in that case.
+      - name: Publish to npm
+        run: |
+          cd pkg
+          npm publish --access public
+        if: startsWith(github.ref, 'refs/tags/')
       - uses: actions/upload-artifact@v4
         with:
           name: wasm-pkg
