@@ -49,16 +49,9 @@ impl SuiteId {
     }
   }
 
-  /// The short name a caller passes across a boundary that has no enums —
-  /// the wasm API, and the `bbs_suite` member of a credential request.
-  pub fn wire_name(self) -> &'static str {
-    match self {
-      SuiteId::Plain => "plain",
-      SuiteId::Schnorr => "schnorr",
-    }
-  }
-
-  /// Parse [`wire_name`](Self::wire_name).
+  /// Parse the short name a caller passes across a boundary that has no
+  /// enums — the wasm API, and the `bbs_suite` member of a credential
+  /// request.
   ///
   /// Unknown names are rejected rather than defaulted. Defaulting would
   /// mean a typo silently selecting a different domain separation, which

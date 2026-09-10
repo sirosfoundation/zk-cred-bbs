@@ -348,6 +348,14 @@ impl PresentInit {
   }
 }
 
+#[wasm_bindgen]
+extern "C" {
+  /// The disclosed claims, typed for TypeScript. Values are `unknown`
+  /// rather than `string`: a claim is whatever JSON the issuer signed.
+  #[wasm_bindgen(typescript_type = "Record<string, unknown>")]
+  pub type DisclosedClaims;
+}
+
 /// What a verifier learned from a presentation, after it verified.
 #[wasm_bindgen]
 pub struct PresentationResult {
@@ -368,7 +376,7 @@ impl PresentationResult {
   /// Withheld claims are absent, not null: a verifier learns nothing about
   /// them beyond their pointer appearing in the header's map.
   #[wasm_bindgen(getter)]
-  pub fn disclosed(&self) -> Result<JsValue, JsValue> {
+  pub fn disclosed(&self) -> Result<DisclosedClaims, JsValue> {
     let mut out = serde_json::Map::new();
     for claim in &self.inner.disclosed {
       let value: serde_json::Value =
@@ -377,7 +385,7 @@ impl PresentationResult {
     }
     // Through JSON.parse rather than a hand-built object: it is one call,
     // and it cannot disagree with what every other binding returns.
-    js_sys::JSON::parse(&serde_json::Value::Object(out).to_string())
+    Ok(js_sys::JSON::parse(&serde_json::Value::Object(out).to_string())?.unchecked_into())
   }
 }
 
