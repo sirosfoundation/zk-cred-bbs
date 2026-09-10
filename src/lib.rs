@@ -11,6 +11,7 @@ pub mod blind;
 pub mod error;
 #[cfg(feature = "uniffi")]
 pub mod ffi_api;
+pub mod flow;
 pub mod go_ffi;
 #[cfg(feature = "wasm")]
 pub mod js_api;

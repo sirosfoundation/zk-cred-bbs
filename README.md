@@ -103,6 +103,13 @@ ordered differently, a disclosure index off by one - every proof fails, and
 nothing in the failure says why. One implementation cannot disagree with
 itself.
 
+Which is also why the operations that join the two - accept this
+credential, present these claims, verify this presentation - live in
+`src/flow.rs` rather than once per binding. `src/ffi_api.rs` (UniFFI),
+`src/go_ffi.rs` (C ABI) and `src/js_api.rs` (wasm) convert types and
+nothing else; all four consumers run the same code. A copy per binding
+would put the argument above back in play, one language at a time.
+
 Three deliberate divergences from the draft, each documented in the module:
 key binding is this profile's Schnorr construction rather than
 `ecdsa-p256-db` (a different message layout, so it is refused by name, not
@@ -151,13 +158,33 @@ npm install @sirosfoundation/zk-cred-bbs-wasm
 ```
 
 ```js
-import init, { commitInit, commitFinalize } from '@sirosfoundation/zk-cred-bbs-wasm';
+import init, {
+  jwpCommittedMessages, commitInit, commitFinalize,
+  jwpAccept, jwpPresentInit, jwpPresentFinalize,
+} from '@sirosfoundation/zk-cred-bbs-wasm';
 
 await init();                       // fetches the .wasm; initSync(bytes) off a filesystem
-const commit = commitInit('schnorr', committedMessages, keybindPublicKeys);
+
+// Issuance. The claims the issuer must not see, as the messages it signs
+// blind - in the order the credential's map will name them.
+const holder = jwpCommittedMessages(JSON.stringify({ device_pin_hash: h }));
+const commit = commitInit('schnorr', holder.messages, keybindPublicKeys);
 // ...authenticator signs commit.challenge once per key binding key...
-const commitmentWithProof = commitFinalize('schnorr', commit.state, signatures);
+const commitment = commitFinalize('schnorr', commit.state, signatures);
+// ...send commitment + holder.pointers in the credential request, and
+// check what comes back before storing it...
+const info = jwpAccept('schnorr', issuedJwp, issuerPk, holder.messages,
+                       keybindPublicKeys, commit.secretProverBlind);
+
+// Presentation. Init in a worker, sign on the main thread, finalize.
+const p = jwpPresentInit('schnorr', issuedJwp, issuerPk, presentationHeader,
+                         ['/given_name'], holder.messages, keybindPublicKeys,
+                         commit.secretProverBlind);
+const presented = jwpPresentFinalize('schnorr', p.state, await sign(p.keybindChallenges));
 ```
+
+`secretProverBlind` is the credential's long-term secret: store it with the
+credential, and never let it leave the wallet. It cannot be recomputed.
 
 `make wasm` builds it locally into `pkg/`. It has to go through the
 Makefile rather than a bare `wasm-pack build`: the browser target needs
@@ -167,16 +194,19 @@ source, and the Makefile is the one place that knows that.
 `node tests/wasm_smoke.mjs` runs the built package — CI does this too,
 because checking that `pkg/zk_cred_bbs.js` exports the right names catches
 a renamed binding and nothing else. A package whose wasm fails to
-instantiate exports exactly the same symbols.
+instantiate exports exactly the same symbols. It runs against
+`test-vectors/sdk_jwp_fixture.json`, the same fixture the Kotlin and Swift
+SDKs test against and the Go relying party verifies — so it demonstrates
+the property that actually matters, which is that the four bindings agree
+about which claim is which message.
 
-**What is not in it yet.** The `jwp*` entry points — `jwpInspect`,
-`jwpAccept`, `jwpPresentInit`/`Finalize`, `jwpVerify`,
-`jwpBuildPresentationHeader`, `jwpCommittedMessages` — exist on the UniFFI
-and C ABI surfaces but not this one, so a browser client can build a
-commitment and prove over raw messages while the claim-to-message mapping
-would have to be reimplemented in TypeScript. That mapping is exactly what
-this crate exists to keep in one place, so treat the gap as temporary: see
-the migration plan's Stage 6.
+The browser surface is the full one: the `jwp*` entry points are here, not
+only on UniFFI and the C ABI. That is deliberate rather than convenient.
+The claim-to-message mapping — which claim is message 3, in what order,
+under what pointer — is part of what the issuer's signature covers, so a
+TypeScript reimplementation of it would not fail at the boundary where you
+could see it. It would mint credentials that verify nowhere, and do it
+months later.
 
 ### The two-phase API is not decoration
 

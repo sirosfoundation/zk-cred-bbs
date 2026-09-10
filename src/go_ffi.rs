@@ -58,10 +58,10 @@
 //! panic as an ordinary error. A panic unwinding across the FFI boundary
 //! would be undefined behaviour and would take the Go process with it.
 
-use crate::blind::{BlindSuite, Disclosure, PLAIN_SUITE_ID, SCHNORR_SUITE_ID};
+use crate::blind::{BlindSuite, Disclosure};
 use crate::error::Error;
+use crate::flow::SuiteId;
 use crate::keybind::SchnorrBls12381;
-use crate::suite::{ScalarSource, Suite};
 use std::ffi::{CString, c_char};
 use std::slice;
 
@@ -240,13 +240,16 @@ unsafe fn finish_buffer(
   }
 }
 
+fn suite_id_for(selector: u32) -> Result<SuiteId, Error> {
+  match selector {
+    ZK_CRED_BBS_SUITE_PLAIN => Ok(SuiteId::Plain),
+    ZK_CRED_BBS_SUITE_SCHNORR => Ok(SuiteId::Schnorr),
+    _ => Err(Error::Unsupported("unknown suite selector")),
+  }
+}
+
 fn suite_for(selector: u32) -> Result<BlindSuite<SchnorrBls12381>, Error> {
-  let id = match selector {
-    ZK_CRED_BBS_SUITE_PLAIN => PLAIN_SUITE_ID,
-    ZK_CRED_BBS_SUITE_SCHNORR => SCHNORR_SUITE_ID,
-    _ => return Err(Error::Unsupported("unknown suite selector")),
-  };
-  Ok(BlindSuite::new(Suite::new(ScalarSource::System), SchnorrBls12381, id))
+  Ok(crate::flow::suite(suite_id_for(selector)?))
 }
 
 fn disclosures_from_codes(codes: &[u8]) -> Result<Vec<Disclosure>, Error> {
@@ -512,32 +515,19 @@ pub unsafe extern "C" fn zk_cred_bbs_jwp_verify(
     let compact = unsafe { utf8_or_empty(presented_jwp, presented_jwp_len, "presented_jwp") }?;
     let pk = unsafe { bytes_or_empty(public_key, public_key_len, "public_key") }?;
 
-    let presented = crate::jwp::PresentedJwp::decode(compact)?;
-    let view = presented.header()?;
-    let disclosures = presented.disclosures();
-
-    suite_for(suite)?.blind_proof_verify(
-      pk,
-      &presented.proof,
-      &presented.issuer_header,
-      &presented.presentation_header,
-      view.num_signer_messages(),
-      &presented.disclosed_messages(),
-      &disclosures,
-    )?;
+    let result = crate::flow::verify(suite_id_for(suite)?, compact, pk)?;
 
     // Only reached once the proof verified, so every pointer/value pair
-    // below is one the issuer actually signed.
-    let pointers = view.pointers();
+    // below is one the issuer actually signed. The claim values arrive as
+    // JSON text and go back out as JSON values, so a Go caller unmarshals
+    // the document once rather than once per claim.
     let mut disclosed = Vec::new();
-    for (index, payload) in presented.payloads.iter().enumerate() {
-      if let Some(bytes) = payload {
-        let value: serde_json::Value =
-          serde_json::from_slice(bytes).map_err(|e| Error::MalformedContainer(format!("disclosed claim is not valid JSON: {e}")))?;
-        disclosed.push(serde_json::json!({"pointer": pointers[index], "value": value}));
-      }
+    for claim in &result.disclosed {
+      let value: serde_json::Value =
+        serde_json::from_str(&claim.value_json).map_err(|e| Error::MalformedContainer(format!("disclosed claim is not valid JSON: {e}")))?;
+      disclosed.push(serde_json::json!({"pointer": claim.pointer, "value": value}));
     }
-    let doc = serde_json::json!({"vct": view.vct, "disclosed": disclosed});
+    let doc = serde_json::json!({"vct": result.vct, "disclosed": disclosed});
     serde_json::to_vec(&doc).map_err(|e| Error::MalformedContainer(format!("encoding result: {e}")))
   });
   unsafe { finish_buffer(result, result_out, result_len_out, error_out, "result") }

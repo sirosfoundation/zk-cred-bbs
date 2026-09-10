@@ -80,7 +80,9 @@ jobs:
       - name: Check the expected entry points are exported
         run: |
           for fn in commitInit commitFinalize verifyBlindSign \
-                    blindProofGenInit blindProofGenFinalize blindProofVerify; do
+                    blindProofGenInit blindProofGenFinalize blindProofVerify \
+                    jwpCommittedMessages jwpInspect jwpAccept jwpPresentInit \
+                    jwpPresentFinalize jwpVerify jwpBuildPresentationHeader; do
             grep -q "export function $fn" pkg/zk_cred_bbs.js \
               || { echo "missing export: $fn"; exit 1; }
           done

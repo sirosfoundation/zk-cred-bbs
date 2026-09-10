@@ -22,21 +22,19 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::blind::{BlindSuite, Disclosure, PLAIN_SUITE_ID, SCHNORR_SUITE_ID};
+use crate::blind::{BlindSuite, Disclosure};
 use crate::keybind::SchnorrBls12381;
-use crate::suite::{ScalarSource, Suite};
 
 fn err(e: crate::Error) -> JsValue {
   JsValue::from_str(&e.to_string())
 }
 
+fn suite_id_for(suite_id: &str) -> Result<crate::flow::SuiteId, JsValue> {
+  crate::flow::SuiteId::parse(suite_id).map_err(err)
+}
+
 fn suite_for(suite_id: &str) -> Result<BlindSuite<SchnorrBls12381>, JsValue> {
-  let id = match suite_id {
-    "plain" => PLAIN_SUITE_ID,
-    "schnorr" => SCHNORR_SUITE_ID,
-    _ => return Err(JsValue::from_str("unknown suite: expected \"plain\" or \"schnorr\"")),
-  };
-  Ok(BlindSuite::new(Suite::new(ScalarSource::System), SchnorrBls12381, id))
+  Ok(crate::flow::suite(suite_id_for(suite_id)?))
 }
 
 fn disclosures_from(codes: &[u8]) -> Result<Vec<Disclosure>, JsValue> {
@@ -256,4 +254,230 @@ pub fn blind_proof_verify(
       &disclosures_from(disclosures)?,
     )
     .map_err(err)
+}
+
+// The credential-level API. Everything above operates on message vectors;
+// everything below operates on claims and JWP containers, which is what a
+// browser wallet actually holds.
+//
+// These exist here rather than being left to TypeScript because the
+// claim-to-message mapping - which claim is message 3, in what order, with
+// what pointer - is part of what the signature covers. A second
+// implementation of it in the page would not fail at the boundary; it
+// would produce credentials that verify nowhere, months later. Same
+// argument as the native SDKs, same code: `crate::flow`.
+
+/// What a stored credential says about itself.
+#[wasm_bindgen]
+pub struct CredentialInfo {
+  inner: crate::flow::CredentialInfo,
+}
+
+#[wasm_bindgen]
+impl CredentialInfo {
+  /// The SD-JWT VC type identifier, for matching against what a verifier
+  /// asked for.
+  #[wasm_bindgen(getter)]
+  pub fn vct(&self) -> String {
+    self.inner.vct.clone()
+  }
+
+  /// The key binding identifier, `undefined` if the credential is not
+  /// bound to a device key.
+  #[wasm_bindgen(getter)]
+  pub fn kb(&self) -> Option<String> {
+    self.inner.kb.clone()
+  }
+
+  /// Every claim's RFC 6901 pointer, in message order.
+  #[wasm_bindgen(getter)]
+  pub fn pointers(&self) -> Vec<String> {
+    self.inner.pointers.clone()
+  }
+
+  /// How many of the messages the issuer supplied. The remainder are the
+  /// holder's own, committed at issuance.
+  #[wasm_bindgen(getter, js_name = numSignerMessages)]
+  pub fn num_signer_messages(&self) -> usize {
+    self.inner.num_signer_messages
+  }
+}
+
+/// Result of [`jwp_committed_messages`].
+#[wasm_bindgen]
+pub struct CommittedMessages {
+  inner: crate::flow::CommittedMessages,
+}
+
+#[wasm_bindgen]
+impl CommittedMessages {
+  /// The messages to hand to [`commit_init`], in order.
+  #[wasm_bindgen(getter)]
+  pub fn messages(&self) -> js_sys::Array {
+    to_js_arrays(&self.inner.messages)
+  }
+
+  /// Their RFC 6901 pointers, in the same order. These go in the
+  /// credential request; the issuer needs them to build the credential's
+  /// map and checks their count against the commitment.
+  #[wasm_bindgen(getter)]
+  pub fn pointers(&self) -> Vec<String> {
+    self.inner.pointers.clone()
+  }
+}
+
+/// Result of [`jwp_present_init`].
+#[wasm_bindgen]
+pub struct PresentInit {
+  inner: crate::flow::PresentInit,
+}
+
+#[wasm_bindgen]
+impl PresentInit {
+  /// Opaque state for [`jwp_present_finalize`]. Transfer this to the main
+  /// thread alongside `keybindChallenges`.
+  #[wasm_bindgen(getter)]
+  pub fn state(&self) -> Vec<u8> {
+    self.inner.state.clone()
+  }
+
+  /// One already-hashed challenge per key binding key.
+  #[wasm_bindgen(getter, js_name = keybindChallenges)]
+  pub fn keybind_challenges(&self) -> js_sys::Array {
+    to_js_arrays(&self.inner.keybind_challenges)
+  }
+}
+
+/// What a verifier learned from a presentation, after it verified.
+#[wasm_bindgen]
+pub struct PresentationResult {
+  inner: crate::flow::PresentationResult,
+}
+
+#[wasm_bindgen]
+impl PresentationResult {
+  #[wasm_bindgen(getter)]
+  pub fn vct(&self) -> String {
+    self.inner.vct.clone()
+  }
+
+  /// The disclosed claims as a JSON object mapping RFC 6901 pointer to
+  /// value — a plain `object`, not a class, so the page can index it
+  /// directly.
+  ///
+  /// Withheld claims are absent, not null: a verifier learns nothing about
+  /// them beyond their pointer appearing in the header's map.
+  #[wasm_bindgen(getter)]
+  pub fn disclosed(&self) -> Result<JsValue, JsValue> {
+    let mut out = serde_json::Map::new();
+    for claim in &self.inner.disclosed {
+      let value: serde_json::Value =
+        serde_json::from_str(&claim.value_json).map_err(|e| JsValue::from_str(&format!("disclosed claim is not valid JSON: {e}")))?;
+      out.insert(claim.pointer.clone(), value);
+    }
+    // Through JSON.parse rather than a hand-built object: it is one call,
+    // and it cannot disagree with what every other binding returns.
+    js_sys::JSON::parse(&serde_json::Value::Object(out).to_string())
+  }
+}
+
+/// The holder's own claims, turned into the messages it commits to.
+///
+/// The wallet's first step in blind issuance. `claimsJson` is a JSON
+/// object; the messages come back in the order the issuer will assign
+/// indices in, with the pointers the credential request must carry.
+#[wasm_bindgen(js_name = jwpCommittedMessages)]
+pub fn jwp_committed_messages(claims_json: &str) -> Result<CommittedMessages, JsValue> {
+  Ok(CommittedMessages {
+    inner: crate::flow::committed_messages(claims_json).map_err(err)?,
+  })
+}
+
+/// Read a stored credential without verifying it — for deciding whether it
+/// can satisfy a request. Proves nothing about the signature; use
+/// [`jwp_accept`] for that.
+#[wasm_bindgen(js_name = jwpInspect)]
+pub fn jwp_inspect(issued_jwp: &str) -> Result<CredentialInfo, JsValue> {
+  Ok(CredentialInfo {
+    inner: crate::flow::inspect(issued_jwp).map_err(err)?,
+  })
+}
+
+/// Check a freshly issued credential before storing it. Not optional — it
+/// is the holder's only chance to catch an issuer that signed something
+/// other than what was asked for.
+#[wasm_bindgen(js_name = jwpAccept)]
+pub fn jwp_accept(
+  suite_id: &str,
+  issued_jwp: &str,
+  issuer_public_key: &[u8],
+  committed_messages: &js_sys::Array,
+  keybind_public_keys: &js_sys::Array,
+  secret_prover_blind: &[u8],
+) -> Result<CredentialInfo, JsValue> {
+  Ok(CredentialInfo {
+    inner: crate::flow::accept(
+      suite_id_for(suite_id)?,
+      issued_jwp,
+      issuer_public_key,
+      &byte_arrays(committed_messages)?,
+      &byte_arrays(keybind_public_keys)?,
+      secret_prover_blind,
+    )
+    .map_err(err)?,
+  })
+}
+
+/// Begin a presentation, disclosing exactly `requestedPointers`. Sign each
+/// `keybindChallenges` entry on the main thread, then call
+/// [`jwp_present_finalize`].
+#[wasm_bindgen(js_name = jwpPresentInit)]
+#[allow(clippy::too_many_arguments)]
+pub fn jwp_present_init(
+  suite_id: &str,
+  issued_jwp: &str,
+  issuer_public_key: &[u8],
+  presentation_header: &[u8],
+  requested_pointers: Vec<String>,
+  committed_messages: &js_sys::Array,
+  keybind_public_keys: &js_sys::Array,
+  secret_prover_blind: &[u8],
+) -> Result<PresentInit, JsValue> {
+  Ok(PresentInit {
+    inner: crate::flow::present_init(
+      suite_id_for(suite_id)?,
+      issued_jwp,
+      issuer_public_key,
+      presentation_header,
+      &requested_pointers,
+      &byte_arrays(committed_messages)?,
+      &byte_arrays(keybind_public_keys)?,
+      secret_prover_blind,
+    )
+    .map_err(err)?,
+  })
+}
+
+/// Complete the presentation, returning the compact presented JWP.
+#[wasm_bindgen(js_name = jwpPresentFinalize)]
+pub fn jwp_present_finalize(suite_id: &str, state: &[u8], keybind_signatures: &js_sys::Array) -> Result<String, JsValue> {
+  crate::flow::present_finalize(suite_id_for(suite_id)?, state, &byte_arrays(keybind_signatures)?).map_err(err)
+}
+
+/// Verify a presentation and return what it disclosed. Present mainly so a
+/// wallet can check its own output; a real relying party verifies
+/// server-side.
+#[wasm_bindgen(js_name = jwpVerify)]
+pub fn jwp_verify(suite_id: &str, presented_jwp: &str, issuer_public_key: &[u8]) -> Result<PresentationResult, JsValue> {
+  Ok(PresentationResult {
+    inner: crate::flow::verify(suite_id_for(suite_id)?, presented_jwp, issuer_public_key).map_err(err)?,
+  })
+}
+
+/// Build a Presentation Header. `extraJson`, if given, is a JSON object
+/// whose members are merged in — where a transport binds its own session
+/// transcript.
+#[wasm_bindgen(js_name = jwpBuildPresentationHeader)]
+pub fn jwp_build_presentation_header(nonce: &str, aud: &str, extra_json: Option<String>) -> Result<Vec<u8>, JsValue> {
+  crate::flow::build_presentation_header(nonce, aud, extra_json.as_deref()).map_err(err)
 }
