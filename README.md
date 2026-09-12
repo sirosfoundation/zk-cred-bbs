@@ -103,6 +103,13 @@ ordered differently, a disclosure index off by one - every proof fails, and
 nothing in the failure says why. One implementation cannot disagree with
 itself.
 
+Which is also why the operations that join the two - accept this
+credential, present these claims, verify this presentation - live in
+`src/flow.rs` rather than once per binding. `src/ffi_api.rs` (UniFFI),
+`src/go_ffi.rs` (C ABI) and `src/js_api.rs` (wasm) convert types and
+nothing else; all four consumers run the same code. A copy per binding
+would put the argument above back in play, one language at a time.
+
 Three deliberate divergences from the draft, each documented in the module:
 key binding is this profile's Schnorr construction rather than
 `ecdsa-p256-db` (a different message layout, so it is refused by name, not
@@ -130,7 +137,7 @@ rather than being ported three more times:
 | Kotlin | `make bindings-kotlin` | `siros-sdk-kotlin` (AAR from GH Packages) |
 | Swift | `make bindings-swift` + `make xcframework` | `siros-sdk-swift` (XCFramework from the release) |
 | C ABI (cgo) | `make go-cabi` | `vc` issuer and verifier |
-| wasm | `make wasm` | `wallet-common` / `wallet-frontend` |
+| wasm | `make wasm` | `wallet-common` / `wallet-frontend`, via npm |
 
 `go-cabi-smoketest/` is a working Go binding over the C ABI, exercised
 against the reference vectors by `make go-smoketest`. It is written in the
@@ -140,6 +147,66 @@ so an out-of-process implementation stays a constructor swap.
 The C header is hand-written; `make check-go-header` fails the build if it
 drifts from `src/go_ffi.rs`, in addition to the compile-time assertions on
 the Rust side.
+
+### The browser package
+
+Published to npm as **`@sirosfoundation/zk-cred-bbs-wasm`**, one version per
+release tag, matching this org's other wasm modules.
+
+```
+npm install @sirosfoundation/zk-cred-bbs-wasm
+```
+
+```js
+import init, {
+  jwpCommittedMessages, commitInit, commitFinalize,
+  jwpAccept, jwpPresentInit, jwpPresentFinalize,
+} from '@sirosfoundation/zk-cred-bbs-wasm';
+
+await init();                       // fetches the .wasm; initSync(bytes) off a filesystem
+
+// Issuance. The claims the issuer must not see, as the messages it signs
+// blind - in the order the credential's map will name them.
+const holder = jwpCommittedMessages(JSON.stringify({ device_pin_hash: h }));
+const commit = commitInit('schnorr', holder.messages, keybindPublicKeys);
+// ...authenticator signs commit.challenge once per key binding key...
+const commitment = commitFinalize('schnorr', commit.state, signatures);
+// ...send commitment + holder.pointers in the credential request, and
+// check what comes back before storing it...
+const info = jwpAccept('schnorr', issuedJwp, issuerPk, holder.messages,
+                       keybindPublicKeys, commit.secretProverBlind);
+
+// Presentation. Init in a worker, sign on the main thread, finalize.
+const p = jwpPresentInit('schnorr', issuedJwp, issuerPk, presentationHeader,
+                         ['/given_name'], holder.messages, keybindPublicKeys,
+                         commit.secretProverBlind);
+const presented = jwpPresentFinalize('schnorr', p.state, await sign(p.keybindChallenges));
+```
+
+`secretProverBlind` is the credential's long-term secret: store it with the
+credential, and never let it leave the wallet. It cannot be recomputed.
+
+`make wasm` builds it locally into `pkg/`. It has to go through the
+Makefile rather than a bare `wasm-pack build`: the browser target needs
+`RUSTFLAGS='--cfg getrandom_backend="wasm_js"'` or it has no entropy
+source, and the Makefile is the one place that knows that.
+
+`node tests/wasm_smoke.mjs` runs the built package — CI does this too,
+because checking that `pkg/zk_cred_bbs.js` exports the right names catches
+a renamed binding and nothing else. A package whose wasm fails to
+instantiate exports exactly the same symbols. It runs against
+`test-vectors/sdk_jwp_fixture.json`, the same fixture the Kotlin and Swift
+SDKs test against and the Go relying party verifies — so it demonstrates
+the property that actually matters, which is that the four bindings agree
+about which claim is which message.
+
+The browser surface is the full one: the `jwp*` entry points are here, not
+only on UniFFI and the C ABI. That is deliberate rather than convenient.
+The claim-to-message mapping — which claim is message 3, in what order,
+under what pointer — is part of what the issuer's signature covers, so a
+TypeScript reimplementation of it would not fail at the boundary where you
+could see it. It would mint credentials that verify nowhere, and do it
+months later.
 
 ### The two-phase API is not decoration
 

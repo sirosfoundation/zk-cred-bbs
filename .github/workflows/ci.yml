@@ -80,7 +80,29 @@ jobs:
       - name: Check the expected entry points are exported
         run: |
           for fn in commitInit commitFinalize verifyBlindSign \
-                    blindProofGenInit blindProofGenFinalize blindProofVerify; do
+                    blindProofGenInit blindProofGenFinalize blindProofVerify \
+                    jwpCommittedMessages jwpInspect jwpAccept jwpPresentInit \
+                    jwpPresentFinalize jwpVerify jwpBuildPresentationHeader; do
             grep -q "export function $fn" pkg/zk_cred_bbs.js \
               || { echo "missing export: $fn"; exit 1; }
           done
+      # The grep above catches a renamed or dropped binding and nothing
+      # else - a package whose wasm fails to instantiate exports exactly
+      # the same symbols. This loads it and computes with it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run the built package
+        run: node tests/wasm_smoke.mjs
+      # A rehearsal of what the release job does, so a publish cannot fail
+      # on packaging at tag time - when the tag is already pushed and the
+      # other artifacts are already out.
+      - name: Rehearse the npm packaging
+        run: |
+          cd pkg
+          jq '.version = "0.0.0-ci"
+              | .name = "@sirosfoundation/zk-cred-bbs-wasm"
+              | .publishConfig = {"access": "public"}' \
+            package.json > tmp.json && mv tmp.json package.json
+          npm pack --dry-run
+          test -f zk_cred_bbs_bg.wasm && test -f zk_cred_bbs.d.ts
