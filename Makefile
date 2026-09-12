@@ -32,7 +32,15 @@ endif
 
 VERSION      := $(shell cargo metadata --no-deps --format-version 1 | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
 
-BUILD_DIR    := target
+# Cargo's own answer, not a hardcoded "target". A redirected build
+# directory - CARGO_TARGET_DIR in the environment, or build.target-dir in
+# a .cargo/config.toml - is a normal thing to have (a tmpfs workspace with
+# the build on real disk, a shared cache across checkouts), and every rule
+# below copies artifacts out of this path by hand. Hardcoding it means
+# cargo writes to one directory and the `cp` reads from another, so the
+# build succeeds and the copy fails on a file that was never missing.
+# Absolute, which is why the recipes below do not prefix it with CURDIR.
+BUILD_DIR    := $(shell cargo metadata --no-deps --format-version 1 | python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])")
 BINDINGS_DIR := bindings
 KOTLIN_DIR   := $(BINDINGS_DIR)/kotlin
 SWIFT_DIR    := $(BINDINGS_DIR)/swift
@@ -107,7 +115,7 @@ go-cabi: $(GO_CABI_DIR)/$(LIB_NAME).$(HOST_LIB_EXT) $(GO_CABI_DIR)/$(LIB_NAME).a
 	@echo "Go C-ABI library + header staged in $(GO_CABI_DIR)"
 
 # Same hazard in reverse: force the default-feature build rather than
-# reusing whatever the uniffi target last left at target/release.
+# reusing whatever the uniffi target last left in the release profile.
 $(GO_CABI_DIR)/$(LIB_NAME).$(HOST_LIB_EXT): $(GO_CABI_DIR)/zk_cred_bbs_go.h FORCE
 	cargo build --release
 	@mkdir -p $(GO_CABI_DIR)
@@ -130,9 +138,9 @@ keygen:
 
 go-smoketest: go-cabi
 	cd go-cabi-smoketest && \
-		CGO_CFLAGS="-I$(CURDIR)/$(GO_CABI_DIR)" \
-		CGO_LDFLAGS="-L$(CURDIR)/$(GO_CABI_DIR) -lzk_cred_bbs" \
-		LD_LIBRARY_PATH="$(CURDIR)/$(GO_CABI_DIR)" \
+		CGO_CFLAGS="-I$(GO_CABI_DIR)" \
+		CGO_LDFLAGS="-L$(GO_CABI_DIR) -lzk_cred_bbs" \
+		LD_LIBRARY_PATH="$(GO_CABI_DIR)" \
 		GOWORK=off \
 		go test -v ./...
 
